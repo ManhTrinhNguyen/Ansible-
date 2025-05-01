@@ -14,6 +14,14 @@
  
 - [Install Ansible](#Install-Ansible)
 
+- [Set up Managed Server](#Set-up-Managed-Server)
+
+- [Ansible Inventory and Ansible ad hoc commands](#Ansible-Inventory-and-Ansible-ad-hoc-commands)
+
+  - [Ansible Inventory](#Ansible-Inventory)
+ 
+  - [Ansible ad-hoc commands](#Ansible-ad-hoc-commands)
+
 # Ansible-
 
 ## Introduction
@@ -148,12 +156,56 @@ Intall Locally on Mac : `brew install ansible`
 !!! Note : Ansible is written in Python so that mean Ansible also needs Python to run . If I want to install Ansible in an alternative way, maybe on different operating system, I could also install it using Python 
 Package manager called Pip : `pip install ansible`
 
+## Set up Managed Server 
 
+I will create 2 Server on Digital Ocean so that I can configure them with Ansible . 
 
+Once I have 2 Server running I want to connect Ansible to these Remote Servers to be able to configure them to execute commands on them . 
 
+Ansible connects to the target Servers using SSH it does not need any Agent installed on those Servers 
 
+!!! NOTE: For Linux Servers there has to be Python installed . IF it is a Windows Server , then Powershell has to be installed on the Window Server  
 
+## Ansible Inventory and Ansible ad hoc commands
 
+#### Ansible Inventory 
+
+Ansible Inventory File 
+
+ - File containing data about the Ansible Client servers
+
+ - `hosts` meaning the manged Servers
+
+ - Default location for file : `/etc/ansible/hosts`
+
+First I need to tell Ansible What are the IP Address or hosts name of the Servers it has to manage . And we do that using a file called hosts : `vim hosts`
+
+ - In the `hosts` file I need all the IP address that I want to connect to
+
+ - Also need credentials to authenticate with  the Server. I need either username, password for the server or a private SSH key . I can specify which private key Ansile should use for each host using Attribute called `ansible_ssh_private_key_file=~/.ssh/id_rsa`
+
+ - Also I need to specify the username of the server, which is `root` by using `ansible_user=root` 
+
+```
+157.230.29.95 ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_user=root
+157.230.23.199 ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_user=root
+```
+
+#### Ansible ad hoc commands
+
+`ansible [pattern] -m [moudle] -a "[module options]"`
+
+ - [pattern] = targeting hosts and group
+
+ - `m` : Stand for `module` . Ansible has modules which are basically containers for one specific command
+
+Whenever I want to execute Ansible commands for a list of server that I have in hosts file, I can do `ansible all -i hosts -m ping`
+
+ - `all`: Default group, which contains every hosts . I want to execute this command for all the server or all the IP address and host names . Inside the hosts file . 
+
+ - `-i hosts`: I also have to specify by which host file I want to use bcs it could be multiple
+
+ - `-m ping`: Ansible module called ping
 
 
 
