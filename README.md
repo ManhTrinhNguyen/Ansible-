@@ -193,6 +193,8 @@ First I need to tell Ansible What are the IP Address or hosts name of the Server
 
 #### Ansible ad hoc commands
 
+<img width="600" alt="Screenshot 2025-05-01 at 14 02 31" src="https://github.com/user-attachments/assets/97877c6a-0149-4372-88cb-b8e65850b302" />
+
 `ansible [pattern] -m [moudle] -a "[module options]"`
 
  - [pattern] = targeting hosts and group
