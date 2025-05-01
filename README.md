@@ -11,6 +11,8 @@
   - [Ansible for Docker](#Ansible-for-Docker)
  
   - [Ansible Tower](#Ansible-Tower)
+ 
+- [Install Ansible](#Install-Ansible)
 
 # Ansible-
 
@@ -135,8 +137,16 @@ Is a UI dashboard from Red Hat, which basically gives me a way to centrally stor
 
 <img width="600" alt="Screenshot 2025-05-01 at 13 21 45" src="https://github.com/user-attachments/assets/58eeae47-05dc-4234-8bbc-d63ef5d103b4" />
 
+## Install Ansible
 
+Install Ansible Locally then I connect to target Server then I execute Ansible commands or Ansible playbooks to manage those target 
 
+Another ways is  have separate remote server where Ansible installed, and then I can acutally manage all the other remote servers with Ansible installed on that specific remote server . Common use case for this is if all my Servers are in some kind of private network, I can only communicate with in that network so I might not be able to administer these Server from my laptop if it's outside that network . In that case I have dedicated server with Ansible installed . And I would execute all the Ansible commands from that Server 
+
+Intall Locally on Mac : `brew install ansible`
+
+!!! Note : Ansible is written in Python so that mean Ansible also needs Python to run . If I want to install Ansible in an alternative way, maybe on different operating system, I could also install it using Python 
+Package manager called Pip : `pip install ansible`
 
 
 
