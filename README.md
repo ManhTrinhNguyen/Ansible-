@@ -32,7 +32,13 @@
  
 - [Introduction Ansible Playbook](#Introduction-Ansible-Playbook)
 
-  - [Write a simple playbook](#Write-a-simple-playbook) 
+  - [Write a simple playbook](#Write-a-simple-playbook)
+ 
+  - [Executing-Playbook](#Executing-Playbook)
+ 
+  - [Install specific Version](#Install-specific-Version)
+ 
+  - [Ansible itempotency](#Ansible-itempotency)
 
 # Ansible-
 
@@ -426,22 +432,115 @@ To write a `play`:
 
     - Every `tasks` has it own `- name: Install Nginx` . Can be any name
    
-    - After `-name: ...` I want to specify 
+    - After `-name: ...` I want to specify what task or what command I want to execute . And this will be a place for `modules` . `Module` is just one specific command that I am executing . Think about if I want install nginx server myself if I ssh to server , I would do `apt install nginx` . So that I will use `apt` module to execute `apt` command bcs I am on Ubuntu . So for `apt` modules I have `name: nginx` which is the package I want to install . And I have a `state: latest` as in install the latest nginx package
+   
+    - As a Second `tasks` I want to `- name: install nginx`. And for this I will use another `module` called `service`, and `service` module has name `name: nginx` and state `state: started`
+   
+```
+---
+- name: Configure nginx server
+  hosts: webserver
+  tasks:  
+  - name: install nginx server
+    apt:
+      name: nginx
+      state: latest
+  - name: start nginx server
+    service:
+      name: nginx
+      state: started
+```
+
+**Wrap up**: Now I have a first `play` which have 2 tasks . First `task` install latest nginx using `apt` module , Second task start the nginx using `service` module . And these 2 `tasks` are executed on the hosts that belong to `webserver` group in the `hosts` file 
+
+#### Executing Playbook
+
+Before execute I can create Ansible config file in this project `touch ansible.cfg`
+
+I can have own Ansible config file for every project so that all the configuration is specific to that one project
+
+To execute ansible playbook : `ansible-playbook -i <hosts-file> <play-book.yaml file>`
+
+If successed I will have ouput in the terminal : 
+
+ - First I have the name `play` that got execute
+
+ - Second I have `Task` which is call `Gathering Fact`
+
+   - `Gathering Fact` is a module that automatically added and executed at the beginning of every `play` and it collects a lot of information about these remote servers that I am connecting to . Including wheather it is accessible, what is the Status, which OS and distribution it is using, and a lot others infomation that I can actually use in my `playbook`
   
+ - Then I will see a first `task` said `changed`. Install nginx server was a changed in the Server , they have package that doesn't exist before . Ansible will identify that and show me as a `changed`
+ 
+ - Then I have `Play Cap` which is a summary for that
+
+Now I can connect to a server `ssh root@<ip-address>` and see if nginx is running `ps aux | grep nginx` 
+
+#### Install specific Version 
+
+Now I want to install specific version of a package on the Server, not the latest one 
+
+To provide specific Version of a package that I want to install I can set `name: nginx=<version>` . `<version>` can be regular expression or specific . Then I would have `state: present`
+
+To look up package version for different packages on ubuntu . Go to (https://launchpad.net/ubuntu)
 
 
+```
+---
+- name: Configure nginx server
+  hosts: webserver
+  tasks:
+  - name: install nginx server
+    apt:
+      name: nginx=1.24.0-1ubuntu1 ###
+      state: present ###
+  - name: start nginx server
+    service:
+      name: nginx
+      state: started
+```
+
+Or with Regular expression 
+
+```
+---
+- name: Configure nginx server
+  hosts: webserver
+  tasks:
+  - name: install nginx server
+    apt:
+      name: nginx=1.24* ###
+      state: present ###
+  - name: start nginx server
+    service:
+      name: nginx
+      state: started
+```
+
+#### Ansible itempotency 
+
+Most Ansible modules check wheather the desired state has already been achieved . They exit without performing any action 
+
+Ansible compared the Actual state and the Desired State  
+
+Iempotency mean If I execute the same configuration multiples I will get the same results 
 
 
+To stop Nignx Server 
 
-
-
-
-
-
-
-
-
-
+```
+---
+- name: Configure nginx server
+  hosts: webserver
+  tasks:
+  - name: uninstall nginx server
+    apt:
+      name: nginx
+      state: absent ##
+  - name: start nginx server
+    service:
+      name: nginx
+      state: stopped ##
+```
 
 
 
