@@ -29,6 +29,10 @@
   - [Authorized Keys and Known Hosts](#Authorized-Keys-and-Known-Hosts)
  
   - [Disalbe Host Key Checking](#Disalbe-Host-Key-Checking)
+ 
+- [Introduction Ansible Playbook](#Introduction-Ansible-Playbook)
+
+  - [Write a simple playbook](#Write-a-simple-playbook) 
 
 # Ansible-
 
@@ -385,6 +389,58 @@ So now I can ssh to a new server for the first time with Ansible it shouldn't gi
 I can also set this configuration for specific Ansible project, so instead of creating `~/.ansible.cfg` in the user's home directory , I can create this configuration file in the Ansible project directory `vim ansible.cfg` . 
 
 <img width="600" alt="Screenshot 2025-05-03 at 12 54 21" src="https://github.com/user-attachments/assets/2eb8931f-b7a5-4312-8a18-8bffbb82735f" />
+
+## Introduction Ansible Playbook
+
+Obviously in Ansible I want to configure the Server like install Aplication, Update, create files etc .... for that I will write `Ansible Playbook`
+
+Since Ansible is IaC tools, it will treated like code 
+
+I will create Project Folder and open editor and start creating Ansible configuration files . Finally we can create a git repository for this Ansible project and check all the code or all the configuration files into that repository , same as Terraform Project 
+
+First I will create a `hosts` file . In every Ansible project I will always has a `hosts` file  
+
+#### Write a simple playbook
+
+Create `touch my-playbook.yaml`
+
+Syntax of playbook : 
+
+<img width="400" alt="Screenshot 2025-05-03 at 13 18 11" src="https://github.com/user-attachments/assets/257c12f1-4ec1-4971-9610-15201f2e0406" />
+
+`---` this is a YAML syntax for separating . Basically blocks in the YAML file itself 
+
+A `Playbook` can have multipke `Plays`
+
+`Plays` is a group of task that I want to execute on several Servers
+
+ - For example I can have a `plays` for DB server . And I can have another `plays` for Web server . And I would have both a this `plays` in one `Playbook`
+
+To write a `play`:
+
+  - `-name: Configure Nginx Web server` . Every `plays` has a `-name:` and it is optional where me and my team member who then work with my script or my Ansible project basically know what this `play` does
+
+  - Every `play` have to have `hosts` define which Server from my `hosts` inventory I want to run this play on . I can provide individule Server by using IP Address or I can provide a Group Name with multiple Servers in there `hosts: webserver`. I can only define the host that from `hosts` file
+
+  - `tasks` are a list of command that I want to execute on all the Server the I have define in the `hosts: ...` . `Tasks` is a list and YAML syntax for lists is start with `-`.
+
+    - Every `tasks` has it own `- name: Install Nginx` . Can be any name
+   
+    - After `-name: ...` I want to specify 
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
