@@ -21,6 +21,14 @@
   - [Ansible Inventory](#Ansible-Inventory)
  
   - [Ansible ad-hoc commands](#Ansible-ad-hoc-commands)
+ 
+- [Configure AWS EC2 Server with Ansible](#Configure-AWS-EC2-Server-with-Ansible)
+
+- [Managing Host Key Checking](#Managing-Host-Key-Checking)
+
+  - [Authorized Keys and Known Hosts](#Authorized-Keys-and-Known-Hosts)
+ 
+  - [Disalbe Host Key Checking](#Disalbe-Host-Key-Checking)
 
 # Ansible-
 
@@ -259,7 +267,120 @@ ansible_ssh_private_key_file=~/.ssh/id_rsa
 ansible_user=root
 ```
 
+## Configure AWS EC2 Server with Ansible
 
+Create another group call EC2 in the `hosts` file 
+
+In AWS, for every Instances, in addition to the IP address, Private and Public , I also get the host names (DNS names) . In the Inventory file (hosts file) I can also DNS name of the Server 
+
+The same way for Droplet Servers, we want to configure which OS user I want to connect with to the servers and which Private key 
+
+SSH `.pem` private key need to modify stricter before I can connect to EC2 `chmod 400 ~/.ssh/tim.pem`
+
+```
+[droplet]
+157.230.29.95 
+157.230.23.199 
+
+[droplet:vars]
+ansible_ssh_private_key_file=~/.ssh/id_rsa
+ansible_user=root
+
+[ec2]
+ip-10-0-1-121.us-west-1.compute.internal
+ip-10-0-2-70.us-west-1.compute.internal
+
+[ec2:vars]
+ansible_ssh_private_key_file=~/.ssh/tim.pem
+ansible_user=ec2-user
+```
+
+Now I can ssh to the Server `ansible ec2 -i hosts -m ping`
+
+After executed I have a Warning that is related to the Python interpreter . So even though Python 3 is already installed on the Servers, Ansible is going to use its own interpreter discovery tool to try to find the Python installation on the host automatically . So this warning is a note to say that if Ansible find another interpreter path, For example for an older version of Python, then Ansible might use this path instead . And in the hosts files, I can acutally override that behavior and set the location of Python interpreter explicitly for the host 
+
+```
+[droplet]
+157.230.29.95 
+157.230.23.199 
+
+[droplet:vars]
+ansible_ssh_private_key_file=~/.ssh/id_rsa
+ansible_user=root
+
+[ec2]
+ip-10-0-1-121.us-west-1.compute.internal
+ip-10-0-2-70.us-west-1.compute.internal ansible_python_interpreter=/usr/bin/python3.9
+
+[ec2:vars]
+ansible_ssh_private_key_file=~/.ssh/tim.pem
+ansible_user=ec2-user
+```
+
+## Managing Host Key Checking
+
+I need to take care of the host key check prompt . If I want to automate configuration on the servers using Ansible, then we want this thing to be able to run automatically without any interaction 
+
+How do I configure that ? 
+
+#### Authorized Keys and Known Hosts
+
+There is 2 ways to handle SSH key checks in General, wheather it is with Ansible or with other tools . 
+
+First one is if I have servers that are long running, meaning that we create these Droplets once and we know that we are going to have this droplet servers for a long time and our application are going to run there for a long time . In this case I can acutally configure or do this SSH key check once for each Server from the machine where Ansible is running
+
+When I ssh from my machine to target machine, both servers need to identify and authenticate each other . So the server must allow our machine to connect to it as well as our machine must recognize this server as a valid host . For this to happen, the Server which is connecting or SSH-ing into the target Server, must add target Server infomation a file called `known hosts` that file located in `ls ~/.ssh/known_host` . 
+
+ - To add target Server information to `known_host` I use : `ssh-keyscan -H <host-ip-address> >> ~/.ssh/known_hosts` . So this will add an entry about the remote server in the known hosts file
+
+Another steps is for the remote Server to authenticate the machine where I am trying to SSH from , for that this target Server has to have the Public SSH key `cat ~/.ssh/id_rsa.pub`, this key must already have our public or the connecting machines, public ssh key inside .
+
+ -  Since I create the Droplet using the SSH key, Digital Ocean automatically added our public SSH key to the Server
+
+ - To see that I can ssh to the Server `ssh root@<host-ip-address>` . I will not get a prompt bcs I added the Server to `known_host` file . Also on this that I just connected to, there is already my public SSH key in `ls .ssh/authorized_keys`
+
+Another example : This time I will create a Droplet with Password . Not SSH key . 
+
+ - Add target Server information to `known_host` I use : `ssh-keyscan -H <host-ip-address> >> ~/.ssh/known_hosts`
+
+ - When I `ssh root@<ip-address>`, it is asking for a `root` password .
+
+ - Inside droplet this `cat .ssh/authorized_key` is empty . However I can copy a Public SSH key into a target server `cat .ssh/authorized_key`
+
+ - I can do that In my terminal `ssh-copy-id root@<ip-address>`. This will take the public key in the default location which is `cat .ssh/authorized_key` and copy that to the droplet root users in this location `cat .ssh/authorized_key`
+
+ - Now I can ssh to the target machine without proivde password
+
+With those example above I would do on Servers that are long-term servers, that I spin up once and then use it for a long period of time 
+
+#### Disalbe Host Key Checking
+
+This way is less secure bcs the key check its security reasons, however if I have an infrastructure where I am creating and destroying servers all the time, so my infrastrucuture is not made up of static servers that I spin up once and use long term .
+
+For example : For every test run maybe I create a new server, run the test there , I destroy the server, or maybe I have dynamic infrastructure where I scale up as my application needs more resources and then scale down when Application has less load 
+
+For this use case it makes sense to disable SSH key check and it's not going to be such a security issue bcs the Servers are short-lived anyways
+
+I will create new droplet with ssh key 
+
+To disable SSH key check by using Ansible configuration file. 
+
+In the earlier version of Ansible when I installed Ansible I actually got a default Ansible configuration file inside `ls /etc/ansible` . However on the recent versions this directory is not getting created and I don't have the configuration file we can create one ourselves. 
+
+However there is default locations here Ansible will look for this configuration file, so I can create that configuration file ourselves in one of the default locations and then Ansible will pick it up . 
+
+ - Location is `/etc/ansible/ansible.cfg`
+
+ - Another one is `~/.ansible.cfg`
+
+ - To create Ansible config file in home dir `vim ~/.ansible.cfg` . Ansible will look for it in this locations and pick up the configuration
+
+```
+[defaults]
+host_key_checking = False 
+```
+
+So now I can ssh to a new server for the first time with Ansible it shouldn't give me any prompt bcs I have disabled . So now Ansible acutally will look in the `~/.ansible.cfg` will see this one and apply the configuration from there 
 
 
 
