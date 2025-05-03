@@ -382,6 +382,9 @@ host_key_checking = False
 
 So now I can ssh to a new server for the first time with Ansible it shouldn't give me any prompt bcs I have disabled . So now Ansible acutally will look in the `~/.ansible.cfg` will see this one and apply the configuration from there 
 
+I can also set this configuration for specific Ansible project, so instead of creating `~/.ansible.cfg` in the user's home directory , I can create this configuration file in the Ansible project directory `vim ansible.cfg` . 
+
+<img width="600" alt="Screenshot 2025-05-03 at 12 54 21" src="https://github.com/user-attachments/assets/2eb8931f-b7a5-4312-8a18-8bffbb82735f" />
 
 
 
