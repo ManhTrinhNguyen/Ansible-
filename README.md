@@ -39,6 +39,14 @@
   - [Install specific Version](#Install-specific-Version)
  
   - [Ansible itempotency](#Ansible-itempotency)
+ 
+- [Modules and Collections in Ansible](#Modules-and-Collections-in-Ansible)
+
+  - [What is a Collection](#What-is-a-Collection)
+ 
+  - [Ansile Galaxy](#Ansile-Galaxy)
+ 
+  - [Ansible Namespaces](#Ansible-Namespaces)
 
 # Ansible-
 
@@ -541,6 +549,81 @@ To stop Nignx Server
       name: nginx
       state: stopped ##
 ```
+
+## Modules-and-Collections-in-Ansible
+
+How to know these Attribute names like `apt`, `service` etc... and what the value of those attributes names should be ? 
+
+Answer is by using Ansible modules which are part of Ansible Collections 
+
+This is a huge lists of moudles : (https://docs.ansible.com/ansible/latest/collections/index_module.html) . 1 Specific entry is 1 module 
+ 
+!!! NOTE : Each of those `modules` is part of a collection 
+
+#### What is a Collection
+
+Collection is actually a packaging and distribution format for all types of Ansible content and these type of Ansible content can be playbooks themselves, this could be modules, this could be plugins, documents .... Instead of having modules separately, and plugins separately and playbooks separately I can just pull all of this together and package them in a single bundle and that bundle is a `Collection` . So now it is easier to distribute and share with all these Ansible content inside 
+
+A lists of collections : (https://docs.ansible.com/ansible/latest/collections/index.html)
+
+The modules `apt` and `service` is a part of `ansible.builtin` Collections
+
+`Ansible Plugins` is a pieces of Ansible code that add to functionality of Ansible itself or the modules that I use . So basically if I have a module for AWS EC2 that maybe creates or terminates EC2 instances on AWS, with a plugin I can enhance that module's functionality . So maybe I can add a feature that filter which EC2 instances I want to terminate .
+
+The name of the modules is actually `ansible.builtin.apt`
+
+Collections of `community.<something>` is actually collections that are maintained and managed by Ansible . These collections are available when I install Ansible 
+
+For example to get a list of ansible collections : `ansible-galaxy collection list`
+
+#### Ansile Galaxy 
+ 
+Collections acutally group Ansible content, modules and plugins . Modules and Plug are code so they have to be listed somewhere, they have to be located somewhere so that I can download that code locally on my machine whenever I need that collection . 
+
+So Where do Collections live ?  
+
+One of the main hubs of collections is acutally Ansible Galaxy 
+
+Link to Ansible Galaxy (https://galaxy.ansible.com/ui/)
+
+Ansible Galaxy is where the code of Collections lives so whenever I need that I can download it from here 
+
+It the same to registry of artifact for different technologies . I have Repositories for npm packages, I have repository for terraform modules, etc ... 
+
+Ansible galaxy is just a command line tools that can fetch the collection from the Ansible galaxy and work with collection 
+
+Whenever we need to install a Collection I can use `ansible-galaxy collection install <collections>`
+
+What happens if specifics collection gets updated, new features come in , I don't have to acutally update my whole Ansible installation to upgrade my collections, I can just pick and choose which individual collection I want to update and intall newer version : `ansible-galaxy collection install <collections> --upgrade`
+
+I can create my own `collections` that will be useful if I have a complex, large Ansible project that basically contains a lot of different types of ansible content. So I have couple of plugin , I have modules that I created, I have a bunch of playbooks, and if I want to share that and distribute that together in a bundle, then I would want to create a collections for that Ansible Project 
+
+Ansible Collections have a predefined structure which is a standard structure that everyone has to stick with, which is a greate thing bcs when I work with collection and I know the standard structure, basically I will know how to navigate in the collections and how to find the right content I need and also adjust and change the right content 
+
+<img width="600" alt="Screenshot 2025-05-06 at 19 16 14" src="https://github.com/user-attachments/assets/33610063-5244-48fe-a560-25d061b638e3" />
+
+#### Ansible Namespaces
+
+Might wonder what is the `community.docker.docker_image` mean, or whatever the name of the modules is 
+
+The structure would be <namespace>.<collection>.<module name> 
+
+Every modules in a collections and every collections are in a Namespace 
+
+<img width="614" alt="Screenshot 2025-05-06 at 19 19 52" src="https://github.com/user-attachments/assets/53cd44c0-b97c-46d1-b44a-dddeb777918a" />
+
+Fully Qualified Collection Name is `community.docker.docker_image` to specify the exact source of a module/plugin/... 
+
+Ansible build in a a default namespace and collection name that Ansible assumes that the module is in . So for the built-in collection content like modules, I don't have to use the fully qualified name 
+
+!!! NOTE: Should using the fully qualified name 
+
+
+
+
+
+
+
 
 
 
