@@ -56,7 +56,13 @@
  
   - [Install node and npm](#Install-node-and-npm)
  
-- [Copy and unpack tar file](#Copy-and-unpack-tar-file) 
+  - [Copy and unpack tar file](#Copy-and-unpack-tar-file)
+ 
+  - [Start Node App](#Start-Node-App)
+ 
+  - [Ensure App is running](#Ensure-App-is-running)
+ 
+  - [Ansible shell vs command Module](#Ansible-shell-vs-command-Module)
 
 # Ansible-
 
@@ -744,11 +750,158 @@ In the second Task I could do those 2 steps `copy` modules, `unarchive` modules 
 
 !!! NOTE : Installing package and copying files or unarchiving archive file on remote server is going to be some of the common tasks with Ansible 
 
+#### Start Node App
+
+First I need to install all the Dependencies that are defined in `package.json` . Bcs I don't have `node_modules` folder inside the tar file, I just have `package.json` . So I need to install all the dependencies that will create `node_modules` folder with all the dependencies first
+
+Then I can run node command which we have available bcs we installed it using Ansible . 
+
+And then execute the `server.js` inside `/app` folder
+
+Inside the same `play` in Deploy Nodejs App I will have another the step call Install Dependencies . In local I would do `npm install` : (https://docs.ansible.com/ansible/latest/collections/community/general/npm_module.html)
+
+ - Very important to understand where each task actually get executed on our local machine or on the control Node , which is where we are executing ansible from or on the managed node which is the remote Server which ansible manages . Most of the command get executed on the remote server that we specify at `hosts: <ip_address>`
+
+ - `npm` module come from the `community.general` . This one is also part of ansible installation. So we don't have to install it and also i don't have to provide full name 
+
+Second step is Start the Application 
+
+ - I will use a `command` module which let me execute any command on a server just like I would execute them myselfs manually
+
+ - `command` module pretty flexible I can do alot of stuff with it and I have a lot of example in the Docs (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/command_module.html#ansible-collections-ansible-builtin-command-module)
+
+```
+- name: Deploy Nodejs App
+  hosts: 165.22.22.94
+  tasks:
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: <absolute path of the file from local machine>
+        dest: /root/
+        remote_src: yes
+    - name: Install Dependencies
+      npm:
+        path: /root/package
+    - name: Start the Application
+      command:
+        chdir: /root/package/app
+        cmd: node server
+```
+
+I will execute it and see what happen : `ansible-playbook -i hosts deploy-node.yaml`
+
+ - Everything installed and run correctly on the remote-server
+
+ - However my `Play` is hanging in the terminal . I started the Application but the `Playbook` not completing . The reason is `node server` command is acutally blocking the terminal this will never exit and to fix that I need to execute this command in the background . To make it run in the background I will need to add an attribute here called `async` and `poll` (https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_async.html)
+
+ - These are acutually general attributes . So these are not part of the `command` module bcs we are not setting them as attributes here inside . We are setting it on the same level
+
+ - I can run any task for any module basically asynchronously so that it doesn't block my current task execution
 
 
+```
+- name: Deploy Nodejs App
+  hosts: 165.22.22.94
+  tasks:
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: <absolute path of the file from local machine>
+        dest: /root/
+        remote_src: yes
+    - name: Install Dependencies
+      npm:
+        path: /root/package
+    - name: Start the Application
+      command:
+        chdir: /root/package/app
+        cmd: node server
+      async: 1000
+      poll: 0
+```
+
+ - So this will execute all the `Playbook` commands and it will run asynchoronously . Even after the Ansbile playbook execution is completed, the node.js application will still run on the server
+
+#### Ensure App is running 
+
+Let's say I want to know without ssh to the remote server and check the Application is running or make sure the application really is running . 
+
+I want the output immediately in the Terminal 
+
+I will use a `shell` module
+
+ - `shell` module pretty much the same as `command` module in terms of executing commands there . But the different is that `shell` module execute the command in the shell . So the Pipe Operator as well as redirect operators and Boolean operators and also environment vairalbes that I have available in shell. If I need to use them I should use a `shell` module
+
+```
+- name: Deploy Nodejs App
+  hosts: 165.22.22.94
+  tasks:
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: <absolute path of the file from local machine>
+        dest: /root/
+        remote_src: yes
+    - name: Install Dependencies
+      npm:
+        path: /root/package
+    - name: Start the Application
+      command:
+        chdir: /root/package/app
+        cmd: node server
+      async: 1000
+      poll: 0
+    - name: Ensure app is running 
+```
 
 
+#### Ansible shell vs command Module
 
+In Ansible, both `shell` and `command` modules are used to run commands on remote systems. While they may seem similar, there are key differences in how they interpret and execute those commands.
+
+---
+
+#### Difference Between `shell` and `command`
+
+| Feature                     | `shell` module                                  | `command` module                                  |
+|----------------------------|--------------------------------------------------|---------------------------------------------------|
+| Shell features supported   | ✅ Yes (pipes, redirects, variables, etc.)       | ❌ No (executes without a shell)                  |
+| Environment variable usage | ✅ Supports `$VAR` and other shell variables      | ❌ Variables must be passed explicitly            |
+| Safer to use?              | ❌ Less safe (risk of shell injection)           | ✅ Safer (no shell parsing)                       |
+| Use cases                  | Complex shell commands                           | Simple, direct commands                          |
+
+---
+
+#### What is a Shell?
+
+A **shell** is a command-line interface that allows users to interact with the operating system. It interprets and executes the commands entered by users or scripts.
+
+Common Unix shells:
+- `bash` (Bourne Again Shell)
+- `sh` (Bourne Shell)
+- `zsh`, `fish`, etc.
+
+Shell features:
+- **Pipes** (`|`)
+- **Redirects** (`>`, `>>`, `2>&1`)
+- **Boolean operators** (`&&`, `||`)
+- **Environment variables** (`$HOME`, `$PATH`)
+
+---
+
+#### ✅ When to Use `shell`
+
+Use the `shell` module when your command includes:
+
+- Pipes (`|`)
+- Redirects (`>`, `>>`)
+- Chained commands (`&&`, `||`)
+- Shell-specific syntax or environment variables
+
+### Example:
+
+```yaml
+- name: Use shell to grep user from /etc/passwd
+  ansible.builtin.shell: "cat /etc/passwd | grep root"
+```
 
 
 
