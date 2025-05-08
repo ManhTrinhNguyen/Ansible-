@@ -63,6 +63,8 @@
   - [Ensure App is running](#Ensure-App-is-running)
  
   - [Ansible shell vs command Module](#Ansible-shell-vs-command-Module)
+ 
+  - [Executing tasks with a different user](#Executing-tasks-with-a-different-user)
 
 # Ansible-
 
@@ -956,6 +958,96 @@ Use the `shell` module when your command includes:
 - name: Use shell to grep user from /etc/passwd
   ansible.builtin.shell: "cat /etc/passwd | grep root"
 ```
+
+#### Executing tasks with a different user
+
+Example above I am executing everythin with Root USer 
+
+With security Best Practices I shouldn't be executing and starting application with a root user. 
+
+Should creating own user for each applications or maybe users for each team member and I should then start application with a non root user 
+
+To do that I will have to create a new user on our remote server bcs right now root is the only one that gets created by default and the one we are using so we will have to create a new user and then we will have to reconfigure this or make some small adjustments to run the application, to run our Nodejs using that new user 
+
+I will leave a Install node and npm as root user 
+
+After that I will create new linux user for node app by using `user` module (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/user_module.html#ansible-collections-ansible-builtin-user-module)
+
+Afther that I want to executing all the command use `tim` user. 
+
+ - To let Ansible know that I want to execute with `tim` user by using `become_user` attribute .
+
+ - `become_user` = set to user with desired privileges . Default is root
+
+ - For `become_user` to need to enable `become: True`
+
+ - So those 2 attributes tell Ansible that we want to execute all this with another user called `tim`
+
+
+```
+---
+- name: Install node and npm 
+  hosts: 165.22.22.94
+  become: True ## 
+  become_user: tim ##
+  tasks:
+    - name: Update apt repo and cache
+      apt:
+        update_cache: yes
+        force_apt_get=yes
+        cache_valid_time=3600 
+    - name: Install nodejs and npm
+      apt:
+        pkg:
+          - nodejs
+          - npm
+
+- name : Create new Linux user for node app
+  hosts: 165.22.22.94
+  tasks:
+    - name: Create Linux User
+      user:
+        name: tim
+        comment: Tim Admin
+        group: admin
+
+- name: Deploy Nodejs App
+  hosts: 165.22.22.94
+  tasks:
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: <absolute path of the file from local machine>
+        dest: /home/tim ###
+        remote_src: yes
+    - name: Install Dependencies
+      npm:
+        path: /home/tim/package
+    - name: Start the Application
+      command:
+        chdir: /home/tim/package/app
+        cmd: node server
+      async: 1000
+      poll: 0
+    - name: Ensure app is running
+      shell: ps aux | grep node
+      register: app_status
+    - debug: msg={{app_status}}
+```
+
+**Recap** : I ssh to server as a Root User. I am installing 2 packages using root user . Then I am creating new user using root user . And then I will use new Linux User to deploy my Nodejs Application
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
