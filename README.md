@@ -827,9 +827,11 @@ Let's say I want to know without ssh to the remote server and check the Applicat
 
 I want the output immediately in the Terminal 
 
-I will use a `shell` module
+I will use a `shell` module (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/shell_module.html#ansible-collections-ansible-builtin-shell-module)
 
  - `shell` module pretty much the same as `command` module in terms of executing commands there . But the different is that `shell` module execute the command in the shell . So the Pipe Operator as well as redirect operators and Boolean operators and also environment vairalbes that I have available in shell. If I need to use them I should use a `shell` module
+
+ - However `command` is more secure in term of having these commands isolated and not running them directly through `shell`. Whereas `shell` module is more open to shell injection . That mean whenever I have commands that don't need anything from `shell` itself like Operator or ENV etc ... I should use `command` module 
 
 ```
 - name: Deploy Nodejs App
@@ -849,8 +851,60 @@ I will use a `shell` module
         cmd: node server
       async: 1000
       poll: 0
-    - name: Ensure app is running 
+    - name: Ensure app is running
+      shell: ps aux | grep node
 ```
+
+To get a result or print out the result of this `shell: ps aux | grep node` command execution and for that there is a concept in Ansible . This is not specific to any `modules` I can apply this to any module and that is `register` 
+
+So I have register attribute available for any tasks, for any module and that is basically creates a variable and assigns that variable result of the module execution or the task execution . So result of this `ps aux | grep node` command execution will be assign to a variable call `app_status` . 
+
+Next step I want to print that Variable by referencing a variable . And for that there is a module called `debug` . This modules is where I want to print a result of a tasks execution. This is a built-in `module` : (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/debug_module.html#ansible-collections-ansible-builtin-debug-module)
+
+ The way we can reference variables in the Yaml file is using `{{<variable name>}}`
+ 
+<img width="437" alt="Screenshot 2025-05-08 at 12 39 32" src="https://github.com/user-attachments/assets/4a632ace-f5e0-4d78-8bbd-557f7b4aa796" />
+
+
+```
+- name: Deploy Nodejs App
+  hosts: 165.22.22.94
+  tasks:
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: <absolute path of the file from local machine>
+        dest: /root/
+        remote_src: yes
+    - name: Install Dependencies
+      npm:
+        path: /root/package
+    - name: Start the Application
+      command:
+        chdir: /root/package/app
+        cmd: node server
+      async: 1000
+      poll: 0
+    - name: Ensure app is running
+      shell: ps aux | grep node
+      register: app_status
+    - debug: msg={{app_status}}
+```
+
+After Execute I will see the output like this : 
+
+<img width="600" alt="Screenshot 2025-05-08 at 12 46 12" src="https://github.com/user-attachments/assets/27f02061-fe53-4e05-ad6c-a8511470293e" />
+
+Every replay of the `Playbook`, the start application task gets executed . So I can see here that even though we did not make any change to the start application task, it has still been run again . The reason for that is `command` and `shell` modules are not stateful (not idempotent)
+
+As mentioned before Ansible executes its tasks, it checks wheather something nees to be done or not, so bascially whether a change is needed or if everything is up to date so no need to do anything . 
+
+Important to Note : Whenever I execute commands or tasks with `command` and `shell`, I don't have state management so Ansible doesn't know whether not to execute the command bcs the application is already running . Solution for this is `conditionals` in Ansible 
+
+Also to mention as a comparision to Python . In Python whenever I executed commands, I needed some kind of checking mechanism for every execution that basically check the status first before executing the command . For example If I am creating a new directory on remote server on a second execution I am going to get an error saying the directory with this name already exist . 
+
+ - That is a downside of using Python compare to Ansible or Terraform bcs even though I can install stuff with Python I can start server and services using Python, I don't have to do the state management at all
+
+ - Ansible and Terraform handle that State check for me . It take care of the State management and checks the current and the desired state and decide itself in an intelligent way wheather something needs to be done or not 
 
 
 #### Ansible shell vs command Module
