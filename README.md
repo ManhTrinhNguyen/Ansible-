@@ -47,6 +47,16 @@
   - [Ansile Galaxy](#Ansile-Galaxy)
  
   - [Ansible Namespaces](#Ansible-Namespaces)
+ 
+- [Deploy Nodejs application](#Deploy-Nodejs-application)
+
+  - [Create Digital Droplet](#Create-Digital-Droplet)
+ 
+  - [Write Playbook](#Write-Playbook)
+ 
+  - [Install node and npm](#Install-node-and-npm)
+ 
+- [Copy and unpack tar file](#Copy-and-unpack-tar-file) 
 
 # Ansible-
 
@@ -618,13 +628,79 @@ Ansible build in a a default namespace and collection name that Ansible assumes 
 
 !!! NOTE: Should using the fully qualified name 
 
+## Deploy Nodejs application 
 
+I will automate installing a Nodejs application on a Digital Ocean Server . So I will Create A Droplet, then I will write an Ansible playbook that will install Node on the Server, Then I will copy a Nodejs tar file to a Server, unpack it there and start the Application using Node command on the Server . Finally I will check that the Application is successfully running 
 
+#### Create Digital Droplet 
 
+I will go to Digital Ocean and create a small Droplet 
 
+#### Write Playbook 
 
+I will add the new IP address of the Droplet in the `hosts` file . 
 
+```
+165.22.22.94 ansbile_ssh_private_key_file=~/.ssh/id_rsa ansbile_user=root
+```
 
+I will create a new Playbook file : `touch deploy-node.yaml`
 
+#### Install node and npm 
+
+They way I will run a Nodejs application on a server is first install dependencies that applications needed via NPM and I will start the Applications using Node command . That mean I need the NPM and Node install on the Server 
+
+First `task` will be to do `apt update`, which basically updates the `apt` package manager repository and cache . 
+
+ - I will do this using `apt` module . This is a part of `ansible.builtin` module which mean I don't need to use fullname
+
+ - `apt` modules docs (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/apt_module.html#ansible-collections-ansible-builtin-apt-module)
+
+ - `cache_valid_time=3600` : Mean that if I execute this immediately after, then it won't update the cache bcs I have some valid validity time set here 
+
+Second `task` I will install nodejs in the server 
+also using `apt` moudle
+
+ - To install a list of packages I will use `pkg`
+
+```
+---
+- name: Install node and npm
+  hosts: 165.22.22.94
+  tasks:
+    - name: Update apt repo and cache
+      apt:
+        update_cache: yes
+        force_apt_get=yes
+        cache_valid_time=3600 #
+    - name: Install nodejs and npm
+      apt:
+        pkg:
+          - nodejs
+          - npm
+```
+
+Playbooks can have multiple `Plays` . The block above preresent for 1 `Play` .
+
+ - Every `Play` has `hosts` `name` of the play, and lists `tasks` by using different `modules`
+
+#### Copy and unpack tar file
+
+I will create another `Play` to deploy Nodejs Application 
+
+First I want to copy a tar file of Nodejs application to the remote server then I want to unpack that in the remote server . And inside the package I will see what get acutally tarred or what inside 
+
+To get a tar file : `npm pack` . This tar file when unpack will ge us package folder 
+
+First task would be copy Nodejs folder to a Server 
+
+ - 
+
+```
+- name: Deploy Nodejs App
+  hosts: 165.22.22.94
+  tasks:
+    
+```
 
 
