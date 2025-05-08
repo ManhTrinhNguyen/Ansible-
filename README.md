@@ -694,13 +694,61 @@ To get a tar file : `npm pack` . This tar file when unpack will ge us package fo
 
 First task would be copy Nodejs folder to a Server 
 
- - 
+ - To copy a file from Local Machine to Remote Server I use `copy` module
+
+   - `copy` module will has a `src` (A file from local machine) and a `dest` (Remote Server)
+  
+   - Bcs I am using a root user on the remote Server . Every will happen on the root directory .
+  
+Second task I want to unpack tar file
+
+ - I will use `unarchive` module
+
+   - `unarchive` module also have a `src` and `dest`
+  
+   - The tar file will unpack as a `package` folder so I will be the name of the unpacked folder
+  
+   - `remote_src: yes` this mean that the `src` attribute that we have defined has to be on the remote server, If I do not specify this it will look for this tar file on our local machine 
 
 ```
 - name: Deploy Nodejs App
   hosts: 165.22.22.94
   tasks:
-    
+    - name: Copy Nodejs folder to a Server
+      copy:
+        src: <absolute path of the file>
+        dest: /root/<name of the file>
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: /root/<name of the file>
+        dest: /root/
+        remote_src: yes
+``` 
+
+To execute that `Playbook`: `ansible-playbook -i hosts deploy-node.yaml`
+
+In the second Task I could do those 2 steps `copy` modules, `unarchive` modules in 1 step.  
+
+ - I will use `unarchive` module to copy a file from my local machine to remote server and unpack it at the same time
+
 ```
+- name: Deploy Nodejs App
+  hosts: 165.22.22.94
+  tasks:
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: <absolute path of the file from local machine>
+        dest: /root/
+        remote_src: yes
+```
+
+!!! NOTE : Installing package and copying files or unarchiving archive file on remote server is going to be some of the common tasks with Ansible 
+
+
+
+
+
+
+
 
 
