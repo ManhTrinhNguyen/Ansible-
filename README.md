@@ -375,7 +375,7 @@ Another example : This time I will create a Droplet with Password . Not SSH key 
 
  - Inside droplet this `cat .ssh/authorized_key` is empty . However I can copy a Public SSH key into a target server `cat .ssh/authorized_key`
 
- - I can do that In my terminal `ssh-copy-id root@<ip-address>`. This will take the public key in the default location which is `cat .ssh/authorized_key` and copy that to the droplet root users in this location `cat .ssh/authorized_key`
+ - I can do that In my terminal `ssh-copy-id root@<ip-address>`. This will take the public key in the default location which is `cat .ssh/id_rsa.pub` and copy that to the droplet root users in this location `cat .ssh/authorized_key`
 
  - Now I can ssh to the target machine without proivde password
 
