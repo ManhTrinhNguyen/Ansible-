@@ -70,7 +70,15 @@
  
 - [Ansible Variable](#Ansible-Variable)
 
-  - [Registered Variable](#Registered-Variable) 
+  - [Registered Variable](#Registered-Variable)
+ 
+  - [Parameterzie Playbook](#Parameterzie-Playbook)
+ 
+  - [Variables defined in a Playbook](#Variables-defined-in-a-Playbook)
+ 
+  - [Passing Variables on the Command Line](#Passing-Variables-on-the-Command-Line)
+ 
+  - [External Variables File](#External-Variables-File)
 
 # Ansible-
 
@@ -1048,12 +1056,321 @@ Afther that I want to executing all the command use `tim` user.
 
 #### Registered Variable 
 
+In the previouse section above I already used one form of variable that is `register` . These are variables that I can register as results of a module or task execution . And I have them available for every single task, whichever module they are using 
+
+Syntax for reference the variable is `{{}}` and the variable name . 
+
+If variable is a Dictionary I can access variable like this `{{<variable-name>.<key>}}`
+
+For example in : 
+
+ - At the same level of the module  `name` . I will do `register: <name-of-variable>`. To access that  I use `debug: msg={{}}` module
+
+ - The Information that variable print out is related to that specific module execution 
+
+```
+- name : Create new Linux user for node app
+  hosts: 165.22.22.94
+  tasks:
+    - name: Create Linux User
+      user:
+        name: tim
+        comment: Tim Admin
+        group: admin
+      register: user_creation_result
+     - debug: msg={{user_creation_result}}
+```
+
+Wrap up : If I want to get some values as a result of task execution, I can get them using this register results 
+
+I can see some of the Infomation in the Docs itself . Basically What information each module execution returns 
+
+#### Parameterzie Playbook  
+
+To make parameterzie by substituting the value with a variable : `{{}}`
+
+For example of instead of `src: <absolute path of the file from local machine>` I can parameterize it like this : `src: {{node-file-location}}` . 
+
+However in somecases we need to enclose these `{{}}` with `"{{}}"`  And that is whenever these `{{}}` are after a column . 
+
+ - The reason for that is by default Ansible will actaully think that this is YAMLs dictionary syntax, and not a variable syntax
+
+ - With `"{{node-file-location}}"` Ansible will know this is actually a variable
+
+ - We only have this problem when we are using this `{{}}` immediately after the colume . For example : `src: /trinhnguyen/ansible/nodejs/nodejs-app.{{version}}.tgz` I don't need `""` for variable 
+
+<img width="504" alt="Screenshot 2025-05-12 at 11 04 38" src="https://github.com/user-attachments/assets/5bda86a2-433f-4414-854c-782bccecd1ce" />
+
+Now I defined a variables . How do I set their value 
+
+ - If we execute now without setting the value . We will get error from Ansible saying location is `undefined`
+
+```
+---
+- name: Install node and npm 
+  hosts: 165.22.22.94
+  become: True ## 
+  become_user: tim ##
+  tasks:
+    - name: Update apt repo and cache
+      apt:
+        update_cache: yes
+        force_apt_get=yes
+        cache_valid_time=3600 
+    - name: Install nodejs and npm
+      apt:
+        pkg:
+          - nodejs
+          - npm
+
+- name : Create new Linux user for node app
+  hosts: 165.22.22.94
+  tasks:
+    - name: Create Linux User
+      user:
+        name: tim
+        comment: Tim Admin
+        group: admin
+
+- name: Deploy Nodejs App
+  hosts: 165.22.22.94
+  tasks:
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: "{{node-file-location}}" ## 
+        dest: "{{destination}}" ###
+        remote_src: yes
+    - name: Install Dependencies
+      npm:
+        path: "{{destination}}/package"
+    - name: Start the Application
+      command:
+        chdir: "{{destination}}/package/app"
+        cmd: node server
+      async: 1000
+      poll: 0
+    - name: Ensure app is running
+      shell: ps aux | grep node
+      register: app_status
+    - debug: msg={{app_status}}
+```
+
+#### Variables defined in a Playbook 
+
+I can set variable at the level with `hosts` 
+
+ - `vars`: This will be a list of variable  
+
+```
+vars: ##
+  - location: <absolute-path>
+  - version: 1.0.0
+  - destination: /home/trinhnguyen
+```
+
+ ```
+---
+- name: Install node and npm 
+  hosts: 165.22.22.94
+  become: True 
+  become_user: tim
+  vars: ##
+    - location: <absolute-path>
+    - version: 1.0.0
+    - destination: /home/trinhnguyen
+  tasks:
+    - name: Update apt repo and cache
+      apt:
+        update_cache: yes
+        force_apt_get=yes
+        cache_valid_time=3600 
+    - name: Install nodejs and npm
+      apt:
+        pkg:
+          - nodejs
+          - npm
+
+- name : Create new Linux user for node app
+  hosts: 165.22.22.94
+  tasks:
+    - name: Create Linux User
+      user:
+        name: tim
+        comment: Tim Admin
+        group: admin
+
+- name: Deploy Nodejs App
+  hosts: 165.22.22.94
+  tasks:
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: "{{node-file-location}}" 
+        dest: "{{destination}}" 
+        remote_src: yes
+    - name: Install Dependencies
+      npm:
+        path: "{{destination}}/package"
+    - name: Start the Application
+      command:
+        chdir: "{{destination}}/package/app"
+        cmd: node server
+      async: 1000
+      poll: 0
+    - name: Ensure app is running
+      shell: ps aux | grep node
+      register: app_status
+    - debug: msg={{app_status}}
+```
+
+#### Passing Variables on the Command Line 
+
+I want the variable value to be configuration from outside the playbook, and that is will be another way of defining `variables` from outside the playbooks .
+
+The way to set variable from out side is during runtime on the command execution . I will pass them as a variable in the the terminal 
+
+To pass this as `variables` I will use a flag call `--extra-vars` shortcut is `-e` . and the variable will be in `""` as key value pair : `-e "version=1.0.0 location=/User/trinhgnuyen/ansible/nodejs-app"`
+
+ - The  whole syntax would look like `ansible-playbook -i hosts deploy-node.yaml -e "version=1.0.0 location=/User/trinhgnuyen/ansible/nodejs-app"`
+
+Another the benefit of passing the variables from outside and not defining them in YAML files is .
+
+ - If I want to make a `user` parameterize . I want to defined them once and be abble to use it in whatever `playbook` I want . I don't want to define in each `play` seperately 
 
 
+ 
+```
+---
+- name: Install node and npm 
+  hosts: 165.22.22.94
+  become: True 
+  become_user: "{{name}}"
+  vars: ##
+    - location: <absolute-path>
+    - version: 1.0.0
+    - destination: /home/trinhnguyen
+  tasks:
+    - name: Update apt repo and cache
+      apt:
+        update_cache: yes
+        force_apt_get=yes
+        cache_valid_time=3600 
+    - name: Install nodejs and npm
+      apt:
+        pkg:
+          - nodejs
+          - npm
+
+- name : Create new Linux user for node app
+  hosts: 165.22.22.94
+  tasks:
+    - name: Create Linux User
+      user:
+        name: "{{name}}"
+        comment: "{{name}} Admin"
+        group: admin
+
+- name: Deploy Nodejs App
+  hosts: 165.22.22.94
+  tasks:
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: "{{node-file-location}}" 
+        dest: "{{destination}}" 
+        remote_src: yes
+    - name: Install Dependencies
+      npm:
+        path: "{{destination}}/package"
+    - name: Start the Application
+      command:
+        chdir: "{{destination}}/package/app"
+        cmd: node server
+      async: 1000
+      poll: 0
+    - name: Ensure app is running
+      shell: ps aux | grep node
+      register: app_status
+    - debug: msg={{app_status}}
+```
 
 
+!!! NOTE : I will a warning `Found variable using reserved name: name` . 
 
+ - I have the warning bcs I called my variable a `reserved word` . And I want to avoide doing that bcs it might give me some unexpected error  
 
+<img width="500" alt="Screenshot 2025-05-12 at 11 40 06" src="https://github.com/user-attachments/assets/23124997-5066-4c40-8140-cd40be58cee7" />
+
+#### External Variables File 
+
+I want to paramerize everything in my configuration file by creating a Separate variable file and then tell Ansible to use that Variable file to get the values from 
+
+I will create variable file `touch project-vars` . I can also do `touch project-vars.yaml` 
+
+ - Variable file in Ansilbe actually has a YAML syntax, so instead of `=` we have to use the YAML syntax with `:` for key values pair .
+
+```
+version: 1.0.0
+location: /Users/trinhnguyen/ansible/nodejs-app
+linux_name: Tim
+destination: /Users/trinh/ansible/nodejs-app{{version}}.tgz
+```
+
+Now I want to use that variable files in the project. In the same level with `hosts` I can specify : 
+
+```
+---
+- name: Install node and npm 
+  hosts: 165.22.22.94
+  become: True 
+  become_user: "{{name}}"
+  vars_files:
+    project-vars
+  tasks:
+    - name: Update apt repo and cache
+      apt:
+        update_cache: yes
+        force_apt_get=yes
+        cache_valid_time=3600 
+    - name: Install nodejs and npm
+      apt:
+        pkg:
+          - nodejs
+          - npm
+
+- name : Create new Linux user for node app
+  hosts: 165.22.22.94
+  vars_files:
+    project-vars
+  tasks:
+    - name: Create Linux User
+      user:
+        name: "{{name}}"
+        comment: "{{name}} Admin"
+        group: admin
+
+- name: Deploy Nodejs App
+  hosts: 165.22.22.94
+  vars_files:
+    project-vars
+  tasks:
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: "{{node-file-location}}" 
+        dest: "{{destination}}" 
+        remote_src: yes
+    - name: Install Dependencies
+      npm:
+        path: "{{destination}}/package"
+    - name: Start the Application
+      command:
+        chdir: "{{destination}}/package/app"
+        cmd: node server
+      async: 1000
+      poll: 0
+    - name: Ensure app is running
+      shell: ps aux | grep node
+      register: app_status
+    - debug: msg={{app_status}}
+```
 
 
 
