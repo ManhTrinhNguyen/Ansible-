@@ -1309,7 +1309,7 @@ I will create variable file `touch project-vars` . I can also do `touch project-
 
 ```
 version: 1.0.0
-location: /Users/trinhnguyen/ansible/nodejs-app
+node-file-location: /Users/trinhnguyen/ansible/nodejs-app
 linux_name: Tim
 destination: /Users/trinh/ansible/nodejs-app{{version}}.tgz
 ```
@@ -1321,7 +1321,7 @@ Now I want to use that variable files in the project. In the same level with `ho
 - name: Install node and npm 
   hosts: 165.22.22.94
   become: True 
-  become_user: "{{name}}"
+  become_user: "{{linux_name}}"
   vars_files:
     project-vars
   tasks:
@@ -1343,8 +1343,8 @@ Now I want to use that variable files in the project. In the same level with `ho
   tasks:
     - name: Create Linux User
       user:
-        name: "{{name}}"
-        comment: "{{name}} Admin"
+        name: "{{linux_name}}"
+        comment: "{{linux_name}} Admin"
         group: admin
 
 - name: Deploy Nodejs App
