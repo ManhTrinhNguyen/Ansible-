@@ -79,6 +79,12 @@
   - [Passing Variables on the Command Line](#Passing-Variables-on-the-Command-Line)
  
   - [External Variables File](#External-Variables-File)
+ 
+- [Deploy Nexus](#Deploy-Nexus)
+
+  - [Preparation](#Preparation)
+ 
+  - [First Play](#First-Play)
 
 # Ansible-
 
@@ -1372,8 +1378,128 @@ Now I want to use that variable files in the project. In the same level with `ho
     - debug: msg={{app_status}}
 ```
 
+## Deploy Nexus
 
+I will automate install and starting Nexus on a remote Server using Ansible 
 
+To manually do it : 
+
+ - I create a Droplet Server
+
+ - SSH into a Server and executing commands manually to download the Nexus binary then unpack it
+ 
+ - Configure the Nexus Application to run using Nexus user and start Nexus Application 
+
+All of those thing above I can now automate using Ansible 
+
+#### Preparation 
+
+I will create a Droplet and get its Public IP address put it in a `hosts` file : `134.122.333.444 ansible_ssh_private_key=~/.ssh/id_rsa ansible_user=root`
+
+I will create a new `Playbook` : `touch deploy-nexus.yaml`
+
+I also have a `nexus.sh` installation for the reference : 
+
+```
+apt-get update
+apt install openjdk-8-jre-headless
+apt install net-tools
+
+cd /opt
+wget https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+tar -zxvf latest-unix.tar.gz
+
+adduser nexus
+chown -R nexus:nexus nexus-3.65.0-02
+chown -R nexus:nexus sonatype-work
+
+vim nexus-3.65.0-02/bin/nexus.rc
+run_as_user="nexus"
+
+su - nexus
+/opt/nexus-3.65.0-02/bin/nexus start
+
+ps aux | grep nexus
+netstat -lnpt
+```
+
+#### First Play
+
+First I have to install Java version 8 bcs Nexus is using JVM or Java runtime 
+
+Then I have to install `net-tools` which basically is just for debugging at the end to see that Nexus is running and listening on the port or Nexus port  
+
+```
+---
+- name: Install java and net-tools
+  hosts: 134.122.333.444
+  tasks:
+    - name: Update apt repo and cache
+      apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+    - name: Install Java version 8
+      apt: name=openjdk-8-jre-headless
+    - name: Install net-tools
+      apt: name=net=tools
+```
+
+ - I could list all the packages that I want to install using this `pgk` attribute, or I can just list them individually
+
+ - If I list them seprately I can see then basically I will see an output as a task for each installation 
+
+#### Second Play 
+
+I will change the dicrectory to `cd /opt` and inside `/opt` I will download the latest tar file of Nexus `wget https://download.sonatype.com/nexus/3/latest-unix.tar.gz` and then I will unpack the tar file `tar -zxvf latest-unix.tar.gz` 
+
+To download from internet from URL Ansible has module `get_url` (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/get_url_module.html#ansible-collections-ansible-builtin-get-url-module)
+
+<img width="460" alt="Screenshot 2025-05-12 at 12 48 52" src="https://github.com/user-attachments/assets/011aca38-b228-4dca-a5cf-9802a3688f25" />
+
+To untar a package I will use module `unarchive` : (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/unarchive_module.html#ansible-collections-ansible-builtin-unarchive-module)
+
+ - If I want the `src` on the remote machine I have to specify `remote_src: True`
+
+After untar Nexus Package I have :
+
+ - `nexus-3.65.0-02` : for Nexus binary
+
+ - `sonatype-work` : For storage, all the data of Nexus 
+   
+```
+- name: Download and unpack Nexus installer
+  hosts: 134.122.333.444
+  tasks:
+  - name: Download Nexus
+    get_url:
+      url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+      dest: /opt/
+  - name: Untar Nexus installer
+    unarchive:
+      src: /opt/<name-of-tarfile>
+      dest: /opt/
+      remote_src: True
+```
+
+However the `src` of the `unarchive` is specific version of Nexus . So when we download this tar with `latest` it will give me the latest version of Nexus . And if we execute this a coupe of weeks after or a month after, we will get a different version and to know  aversion I had to actually ssh into the server and acutally see waht version got downloaded 
+
+But I want everythin to automate it , that mean I have to now configure my `play` to set `<name-of-tarfile>` automatically 
+
+ - I will save the result of exeucute the `get_url` module : `register: download_result`
+
+```
+- name: Download and unpack Nexus installer
+  hosts: 134.122.333.444
+  tasks:
+  - name: Download Nexus
+    get_url:
+      url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+      dest: /opt/
+    register: download_result
+  - name: Untar Nexus installer
+    unarchive:
+      src: /opt/<name-of-tarfile>
+      dest: /opt/
+      remote_src: True
+```
 
 
 
