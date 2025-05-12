@@ -1,5 +1,7 @@
 - [Introduction](#Introduction)
 
+- [Ansible Arichitecture](#Ansible-Arichitecture)
+
   - [Modules | Ansible architecture](#Modules)
   
   - [Ansible uses YAML](#Ansible-uses-YAML)
@@ -93,6 +95,8 @@ Right now the state of Ansible is that whenever IT or System Administator task I
 The only thing I have to do in order to execute these Ansible files on the target server from my own control machine is simple SSH access to the target Servers . This is a unique advantages of Ansible compared to alternative tools that is Agentless 
 
 Nomarlly I want to use some tools on the machine I need to go to machine and install Agent for that tool . To use Ansible however I don't have to install anything on the target servers, I just install it on one machine, which is my control machine, could be even my laptop, and that machine can now manage the whole fleet of target machines remotely . This mean I don't have any deployment effort at the beginning and second I don't have an upgrade effort when moving to a new Ansible Version 
+
+## Ansible Arichitecture
 
 #### Modules
 
