@@ -67,6 +67,10 @@
   - [Ansible shell vs command Module](#Ansible-shell-vs-command-Module)
  
   - [Executing tasks with a different user](#Executing-tasks-with-a-different-user)
+ 
+- [Ansible Variable](#Ansible-Variable)
+
+  - [Registered Variable](#Registered-Variable) 
 
 # Ansible-
 
@@ -1040,6 +1044,9 @@ Afther that I want to executing all the command use `tim` user.
 
 **Recap** : I ssh to server as a Root User. I am installing 2 packages using root user . Then I am creating new user using root user . And then I will use new Linux User to deploy my Nodejs Application
 
+## Ansible Variable
+
+#### Registered Variable 
 
 
 
