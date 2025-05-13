@@ -85,6 +85,10 @@
   - [Preparation](#Preparation)
  
   - [First Play](#First-Play)
+ 
+  - [Second Play](#Second-Play)
+ 
+  - [find Module](#find-Module)
 
 # Ansible-
 
@@ -1483,7 +1487,20 @@ However the `src` of the `unarchive` is specific version of Nexus . So when we d
 
 But I want everythin to automate it , that mean I have to now configure my `play` to set `<name-of-tarfile>` automatically 
 
- - I will save the result of exeucute the `get_url` module : `register: download_result`
+ - I will save the result of exeucute the `get_url` module : `register: download_result` . Then I will add `debug` module to print out that result
+
+ - Basically with printing out the result of the `download_result` I want to get the information about the name of the file without me have to ssh into the server and get a name there
+
+ - In the print out result I have a `dest` attribute that has a value that actually contains full path of that Nexus tar file . So whatever version we download it will be a value of the `dest` key 
+
+
+Now I want to use the information from one `module` to another `module`
+
+ - In a `unarchive` module in the `src` attribute I will change the value from  `src: /opt/<name-of-tarfile>` to `src: "{{download_result.dest}}"`
+
+ - And I can remove the `debug: msg={{download_result}}` bcs I already printed it out 
+
+**Wrap up** : I saved the resoule in `get_url` module by using `register: download_result` and using the result in `unarchive` module `src: "{{download_result.dest}}"` . Now I am able to unpack the file without hard coding its values 
 
 ```
 - name: Download and unpack Nexus installer
@@ -1493,13 +1510,55 @@ But I want everythin to automate it , that mean I have to now configure my `play
     get_url:
       url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
       dest: /opt/
-    register: download_result
+    register: download_result #
+  - debug: msg={{download_result}}
   - name: Untar Nexus installer
     unarchive:
-      src: /opt/<name-of-tarfile>
+      src: "{{download_result.dest}}"
       dest: /opt/
       remote_src: True
 ```
+
+#### find Module 
+
+I want to rename the folder in the remote Server 
+
+To do that I will create another task using `shell` module and execute `mv` command
+
+ - For rename it I would need a dynamic value of the remote server folder name that just got unpacked
+
+ - For that there is a module in Ansible which lets me find a folder or a file using a regular expression 
+
+To get a name of the remote server folder . I will create a task and using `find` module to find a folder name 
+
+```
+- name: Download and unpack Nexus installer
+  hosts: 134.122.333.444
+  tasks:
+  - name: Download Nexus
+    get_url:
+      url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+      dest: /opt/
+    register: download_result #
+  - debug: msg={{download_result}}
+  - name: Untar Nexus installer
+    unarchive:
+      src: "{{download_result.dest}}"
+      dest: /opt/
+      remote_src: True
+  - name: Rename Nexus folder
+    shell: mv
+```
+
+
+
+
+
+
+
+
+
+
 
 
 
