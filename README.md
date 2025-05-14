@@ -125,6 +125,10 @@
   - [Start Docker Containers](#Start-Docker-Containers)
  
   - [Make the Playbook more generic](#Make-the-Playbook-more-generic)
+ 
+- [Ansible and Terraform](#Ansible-and-Terraform)
+
+  - [Intergrate Ansible Playbook execution in Terraform](#Intergrate-Ansible-Playbook-execution-in-Terraform) 
 
 # Ansible-
 
@@ -2219,4 +2223,123 @@ I will create a new `play` .
         name: tim
         groups: adm, docker
 ```
+
+## Ansible and Terraform
+
+#### Intergrate Ansible Playbook execution in Terraform
+
+Wrap up: I basically now know how to configure completely new EC2 Instance using Ansible . And for that we frist used Terraform to automatically create EC2 Instance and then we switched back to our Ansible project to execute Ansible Playbook there . 
+
+We had to update the hosts file with the new Server's IP address and then just execute Ansible Playbook command
+
+There is still the link between the provisioning and configuring the server that we have to do manually: 
+
+ - We have to get that IP address from the Terraform output and we have to set that in the hosts file and then execute Ansible command 
+
+I want to automate complete process
+
+ - Provisioning the Server and then basically handing over the control over to Ansbile and then Ansible taking over and configuring the Server without any intervention from our side .
+
+ - Basically I just need to execute `terraform apply`
+
+First I will go to my Terraform project (https://github.com/ManhTrinhNguyen/Terraform-Exercise) 
+
+In this part 
+
+```
+resource "aws_instance" "myapp" {
+  ami = data.aws_ami.amazon-linux-image.id
+  instance_type = var.instance_type
+  subnet_id = aws_subnet.myapp-subnet.id 
+  vpc_security_group_ids = [aws_security_group.myapp-sg.id]
+  availability_zone = var.availability_zone
+
+  associate_public_ip_address = true
+
+  key_name = "terraform-exercise"
+
+
+  user_data = file("entry-script.sh")
+
+  user_data_replace_on_change = true
+  tags = {
+    Name = "${var.env_prefix}-myapp"
+  }
+}
+```
+
+I will remove a `user_data`
+
+Inside this provision EC2 Instance block we can add a provisioner that will call Ansible command that will then execute on this instance
+
+This time I will executing the `provisioner` with Ansible command 
+
+Provisioner that we have available : 
+
+ - `local-exec`
+
+ - `remote-exec`
+
+ - `file`
+ 
+In this case I will use `local exec` provisioner
+
+ - The reason why we need `local exec` provisioner bcs we are executing the Ansible command locally on this machine . On the same machine where `terraform apply` command get executed .
+
+ - So the Ansible command that we will specify in `local exec` will execute on our laptop 
+
+<img width="500" alt="Screenshot 2025-05-14 at 14 19 05" src="https://github.com/user-attachments/assets/8aab8dc7-222a-4d0f-aeca-bcd0302fd40b" />
+
+I will execute `ansbile-playbook` command inside `local-exec` like this : `command: "ansible-playbook"`
+
+ - To execute `ansible-playbook` first of all we need a playbook name . We need a path to our Ansible `playbook` : `command = ansible-playbook <path-to-ansible-playbook>`
+
+ - But the path to Ansible playbook very long and not clean and also we don't only have the playbook, but we also don't have the configuration in that folder . We don't want to lose all that configuration when we execute the Playbook, so we want it to be the same as when we execute this playbook . For that I will change to the Ansible project directory before executing the command by using `working_dir= <Path-to-Ansible-Project>`
+
+Another the things we have to do here if we execute this Terraform script with this local exec provisioner, so basically the server will be created with some new IP address and then this Ansible playbook will be executed from the Ansible folder, so which `hosts` will Ansbile conntect to is the `hosts` that is defined in Ansible Directory . 
+
+ - We need someway to dynamically get the IP address instead of getting it from `hosts`
+
+ - So instead of using this `hosts` file in our Ansible playbook command, we actually want to pass the IP address from the terraform itself .
+
+ - And I can do that by setting a flag call `--inventory` . This `--inventory` will be a newly IP address created by Terraform which has to be available a dynamic value and we can actually get that by using `self` object .
+
+ - Within `resource "aws_instance" ""` block the `self` refer to the AWS instance which has an attribute called public IP
+
+ - So when the Server created the public IP address will be retrieved from the `self` object, this will be set as an IP address for the `--inventory ${self.public_ip}`. This should acutally overwrites the hosts file that we have in the Ansbile folder . So the `hosts` file will be ignored so this is not in addition to the hosts file but this is a replacement
+ 
+ - and this `--inventory` flag take a file location as a parameter or a comma separated list of IP addresses. And if I am passing IP address just one IP address in this case, and not a file location I have to do `,` like this : `command = "ansible-playbook --inventory ${self.public_ip}, <Ansible-deploy-file>"` so Ansible knows we are passing the IP address not a file
+
+
+
+```
+resource "aws_instance" "myapp" {
+  ami = data.aws_ami.amazon-linux-image.id
+  instance_type = var.instance_type
+  subnet_id = aws_subnet.myapp-subnet.id 
+  vpc_security_group_ids = [aws_security_group.myapp-sg.id]
+  availability_zone = var.availability_zone
+
+  associate_public_ip_address = true
+
+  key_name = "terraform-exercise"
+
+
+  user_data = file("entry-script.sh")
+
+  user_data_replace_on_change = true
+  tags = {
+    Name = "${var.env_prefix}-myapp"
+  }
+
+  provisioner "local-exec" {
+    working_dir= <Path-to-Ansible-Project>
+    command = "ansible-playbook --inventory ${self.public_ip}, <Ansible-deploy-file>"
+  }
+}
+```
+
+
+
+
 
