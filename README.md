@@ -97,6 +97,10 @@
   - [Fourth Play](#Fouth-Play)
  
   - [Fifth Play](#Fifth-Play)
+    
+  - [Configure Git](#Configure-Git)
+ 
+  - [Configure Inventory Default Location](#Configure-Inventory-Default-Location) 
 
 # Ansible-
 
@@ -1874,3 +1878,33 @@ Another one is `wait_for` module (https://docs.ansible.com/ansible/latest/collec
       register: app_status
     - debug: msg={{app_status.stdout_lines}}
 ```
+
+#### Configure Git
+
+I will create a Git Repo for this Project 
+
+My `Playbooks` should be stored safely in this remote repository . 
+
+#### Configure Inventory Default Location 
+
+Configuring default `hosts` file 
+
+Until now whenever we executed our `Playbooks` we always has to pass that hosts file that we created here as a parameter . 
+
+But what if we just created 1 `hosts` file in our Ansible project, in this specific project, and we want that `hosts` file to be just a default so that we don't have to pass it as a parameter of the command all the time, and be able to execute those `playbooks` just with the `playbooks` name 
+
+To do that in my project I will create a `ansible.cfg` file  . 
+
+ - I can configure default `hosts` file location
+
+```
+[defaults]
+host_key_checking = False
+inventory = <location-hosts-file>
+```
+
+Having Ansible configuration file insde our Ansible project makes it very easy to have separate configuration for each project . If each project has it's own hosts file, basically I will just configure it in that projects 
+
+
+
+
