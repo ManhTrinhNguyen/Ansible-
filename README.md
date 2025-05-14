@@ -91,6 +91,12 @@
   - [find Module](#find-Module)
  
   - [Conditionals in Ansible](#Conditionals-in-Ansible)
+ 
+  - [Third Play](#Third-Play)
+ 
+  - [Fourth Play](#Fouth-Play)
+ 
+  - [Fifth Play](#Fifth-Play)
 
 # Ansible-
 
@@ -1634,7 +1640,237 @@ Now to use that information to make Ansilbe skip the `shell` command steps if th
     when: not stat_result.stat.exists
 ```
 
+#### Third Play 
+
+Now In this play I want to configure this section where I create a Nexus user and I make Nexus user owner of Nexus and Sonatype work folder.
+
+```
+adduser nexus
+chown -R nexus:nexus nexus-3.65.0-02
+chown -R nexus:nexus sonatype-work
+```
+
+I will create another `play` .
+
+ - First task is to create Nexus and a group . This command `adduser nexus` is create nexus user and the default nexus group for that user
+
+ - In Ansilbe I have to do that seperately . First I will create Nexus Group the I have to assign that user to the group
+
+ - To create group I can use `group` module (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/group_module.html#ansible-collections-ansible-builtin-group-module)
+
+<img width="500" alt="Screenshot 2025-05-13 at 17 56 02" src="https://github.com/user-attachments/assets/b0209d25-1144-427d-a7f1-532b189c8ae5" />
+
+ - Then I will create Nexus user by using `user` module (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/user_module.html#ansible-collections-ansible-builtin-user-module)
+
+<img width="500" alt="Screenshot 2025-05-13 at 17 58 05" src="https://github.com/user-attachments/assets/c27ec419-fc08-4c0a-9575-8fd4d499a665" />
+
+ - Then I can make `nexus user` a owner of `nexus` folder and `sonatype-work` folder for that I will use `file` module (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#ansible-collections-ansible-builtin-file-module)
 
 
+```
+- name: Create nexus user to own nexus folder
+  hosts: 134.122.333.444
+  tasks:
+    - name: Ensure group nexus exists
+      group:
+        name: nexus
+        state: present
+    - name: Create nexus user
+      user:
+        name: nexus
+        group: nexus
+    - name: Make nexus user owner of nexus folder
+      file:
+        path: /opt/nexus
+        state: directory
+        owner: nexus
+        group: nexus
+        recurse: yes
+    - name: Make nexus user owner of sonatype-work folder
+      file:
+        path: /opt/sonatype-work
+        state: directory
+        owner: nexus
+        group: nexus
+        recurse: yes
+```
+
+#### Fourth Play
+
+The 4th Play will be the execution of this command 
+
+```
+vim nexus-3.65.0-02/bin/nexus.rc
+run_as_user="nexus"
+```
+
+In `ls /opt/nexus/bin/nexus.rc` file that have a value `run_as_user=""` commented out and I wanto to set this with `run_as_user="nexus"` 
+
+I will create another the `Play` to do that . 
+
+ - First I want to set `run_as_user="nexus"` into a `/opt/nexus/bin/nexus.rc` . I can use `blockinfile` module to change the content of the file (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/blockinfile_module.html#ansible-collections-ansible-builtin-blockinfile-module) .
+
+   - `path` Attribute is will be the location of the file
+  
+   - `block` this is a block of content, so this `module` allows me to add multiple lines into a file, 
+so if we had a configuration file and we wanted to add multiple lines in there, multiple configuration values, then we would use this blocking file and we would write all the configuration options line by line .
+
+  - This `|` character representing a multi line string and the value that we are setting is a Nexus 
+
+<img width="500" alt="Screenshot 2025-05-13 at 18 11 24" src="https://github.com/user-attachments/assets/5b17ff27-a381-46db-9fbb-645eb18bb470" />
+
+Another module call `lineinfile` if I want to just write or replace an existing line with another line 
+
+ - `path` Attribute location of the file I want to modify
+
+ - `regexp` : '^#run_as_user=""' . This way I can tell Ansible I want to replace this line with `line: run_as_user="nexus"`
+
+<img width="500" alt="Screenshot 2025-05-13 at 18 22 13" src="https://github.com/user-attachments/assets/61390a01-631e-48a6-bbfb-25786f235245" />
+
+```
+- name: Start Nexus with Nexus user
+  hosts: 134.122.333.444
+  tasks:
+    - name: Set run_as_user nexus ### I can use one of this
+      blockinfile: 
+        path: /opt/nexus/bin/nexus.rc
+        block: |
+          run_as_user="nexus"
+    - name: Set run_as_user nexus ### I can use one of this
+      lineinfile:
+        path: /opt/nexus/bin/nexus.rc
+        regexp: '^#run_as_user=""'
+        line: run_as_user="nexus"
+```
+
+The Untar Nexus task is getting executed everytime I replay my `Playbook` . I want to avoid that happen again 
+
+ - I can do the same the as I did for the renamed Nexus folder task where I check whether the folder already exists and if it does, I don't  execute the task
+
+ - Bcs in the same `Play` I can move `name: Check Nexus folder stats` to the top . Whenever I need to make the check I will just edit
+
+ - So in `Untar Nexus installer` task I will add `when` conditionals and say only execute this task if there is no `/opt/nexus` folder it means that I already did all of this and I have that folder existing 
+
+```
+- name: Download and unpack Nexus installer
+  hosts: 134.122.333.444
+  tasks:
+  - name: Check Nexus folder stats
+    stat:
+      path: /opt/nexus
+    register: stat_result
+  - name: Download Nexus
+    get_url:
+      url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+      dest: /opt/
+    register: download_result #
+  - name: Untar Nexus installer
+    unarchive:
+      src: "{{download_result.dest}}"
+      dest: /opt/
+      remote_src: True
+    when: not stat_result.stat.exists
+  - name: Find Nexus folder
+    find:
+      paths: /opt
+      pattern: "nexus-*"
+      file_type: directory
+    register: find_result
+  - name: Rename Nexus folder
+    shell: mv {{fine_result.files[0].path}} /opt/nexus
+    when: not stat_result.stat.exists
+```
+
+Back to `Start Nexus with Nexus user` Play . As a last step I just have to run Nexus by using `command` module
+
+ - Before that I also have important thing which is switching to a Nexus user . Bcs I want to execute this `/opt/nexus-3.65.0-02/bin/nexus start` as a `nexus user`
+
+ - So I have to tell Ansible to become a Nexus User by using `become: True`, and `become_user: nexus`
+
+!!! Note: Ansible `Playbook` show success and I don't have any failed command, it doesn't always mean that application actually started successfully and that's why we actually did the check at the end of whether application is actually running . That mean we should always do some kind of validation to check that application really started successfully 
+
+!!! Note: Second Problem is that application did not  start bcs of insufficient storage, bcs we are all the very small machine . I will create another bigger Droplet
+
+```
+- name: Start Nexus with Nexus user
+  hosts: 134.122.333.444
+  become: True
+  become_user: nexus
+  tasks:
+    - name: Set run_as_user nexus ### I can use one of this
+      blockinfile: 
+        path: /opt/nexus/bin/nexus.rc
+        block: |
+          run_as_user="nexus"
+    - name: Set run_as_user nexus ### I can use one of this
+      lineinfile:
+        path: /opt/nexus/bin/nexus.rc
+        regexp: '^#run_as_user=""'
+        line: run_as_user="nexus"
+    - name: Start nexus
+      command: /opt/nexus/bin/nexus start
+```
 
 
+Important: First I just destroy an old Droplet and I will use a new one a fresh clean server where I am gonna execute this playbook . If we did this manually like I did the first time in Nexus module we would basically execute all of the commands manually then we realized the Server is too small for Nexus and we have to destroy it and create a new one and manually install command again 
+
+  - However with Ansible we gonna have finished completed script, so it doesn't matter how many times we have to recreate this Nexus configuration and start Nexus application, we just have to execute one command
+
+Important: We have the `playbook` that has a couple of plays and in each play we have this hosts IP address . Whenever we create a new server we will have a new IP Address now we have to go through every `Play` and change the host name everywhere which is inefficient . And that why even for 1 single server to always name your servers 
+
+ - To name nexus_server
+
+```
+[nexus_server]
+207.154.204.213 ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_user=root
+```
+
+ - Now I can reference that one server using that name, even if we created new Server we will just have to update it in 1 place in the host file 
+
+#### Fifth Play 
+
+I want to see in the terminal from Ansible playbook execution itself for that I will add this 2 command  at the end
+
+```
+ps aux | grep nexus
+netstat -lnpt
+```
+
+I will create another `play`
+
+```
+- name: Verify Nexus running
+  hosts: nexus_server
+  tasks:
+    - name: Check with ps command
+      shell: ps aux | grep nexus
+      register: app_status
+    - debug: msg={{app_status.stdout_lines}}
+    - name: Check with netstat
+      shell: netstat -plnt
+      register: app_status
+    - debug: msg={{app_status.stdout_lines}}
+```
+
+The output in the Terminal we don't see the Nexus Port bcs it take sometime at the beginning until it appear in the the result. If we execute the netstat command immediately after we started the application we are not gonna see that entry 
+
+I can fix this timing issue by configure my `Play` to wait some time before executing the netstat command for that we have `pause` module (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/pause_module.html#ansible-collections-ansible-builtin-pause-module)
+
+Another one is `wait_for` module (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/wait_for_module.html#ansible-collections-ansible-builtin-wait-for-module) . I can configure to wait for something to happen this could be timeout or wait for a port to open on the host 
+
+```
+- name: Verify Nexus running
+  hosts: nexus_server
+  tasks:
+    - name: Check with ps command
+      shell: ps aux | grep nexus
+      register: app_status
+    - debug: msg={{app_status.stdout_lines}}
+    - name : Wait one minute
+      pause:
+        minutes: 1 ##
+    - name: Check with netstat
+      shell: netstat -plnt
+      register: app_status
+    - debug: msg={{app_status.stdout_lines}}
+```
