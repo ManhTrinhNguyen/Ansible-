@@ -117,6 +117,14 @@
   - [Fourth Play Add ec2 user to Docker Group](#Fourth-Play-Add-ec2-user-to-Docker-Group)
  
   - [Refactor the Playbook](#Refactor-the-Playbook)
+ 
+  - [Use community docker Ansible Collection](#Use-community-docker-Ansible-Collection)
+ 
+  - [Pull Docker Image](#Pull-Docker-Image)
+ 
+  - [Start Docker Containers](#Start-Docker-Containers)
+ 
+  - [Make the Playbook more generic](#Make-the-Playbook-more-generic)
 
 # Ansible-
 
@@ -2073,12 +2081,142 @@ In Ansible it is very common standard to name the tasks base on what I desire to
 Another thing is that we can basically decide depending on what makes the sense to me to group the tasks in the place in a different order 
 
 
+#### Use community docker Ansible Collection
+
+`command` module is for executing those commands that I can't cover using modules . This should be really the last resort when I can't execute those commands differently . 
+
+However for Docker there is its own set of modules in Ansible 
+
+`command` and  `shell` do not have state management inside, Ansible doesn't know whether to execute this command again or not . 
+
+And we want that state management to have, especially when working with Docker and when executing and doing a lot of stuff with Docker . Plus of course the module are easier to use . I just need to define attribute key value pair and not a complete commands
+
+All the modules start with `community.docker` belong to the same collection 
+
+#### Pull Docker Image 
+
+I will use `community.docker.docker_image` module to pull Docker Image (https://docs.ansible.com/ansible/latest/collections/community/docker/docker_image_module.html)
+
+This module can pull the image, building the images, pushing the image to repository and so on 
+
+I will create another `play` to pull docker image
+
+ - I will use `docker_imange` module to pull the image .
+
+ - Compare to `command` module Ansible detected or saw the redis already pulled so It not gonna run again
+
+```
+- name: Test docker pull
+  hosts: docker_server
+  tasks:
+    - name: Pull redis
+      docker_image:
+        name: redis
+        source: pull
+```
+
+#### Start Docker Containers
+ 
+Above I just have tested `docker_image` module now I can remove it and write the actual one to start Docker Container  
+
+First task I want to copy my docker-compose file from local host to EC2 Server . This docker compose is contain the image name of the container that I want to start on the server 
+
+ - For copying file from local to the remote or from the control Node of Ansible to the managed node, we  can use `copy` module which has `src` and `dest` attribute
+
+I need to Login to DockerHub or ECR Private Repository before I can pull the Private Image 
+
+ - To do that I use `docker_login` module to login to Private Repository (https://docs.ansible.com/ansible/latest/collections/community/docker/docker_login_module.html)
+
+ - I can specify registry URL which is the registry that I am logging into . The default is Docker Hub but also I can set this to ECR , Nexus
+
+ - I also need to provide username and password as a Parameter .
+
+ - I don't want to hardcode my password so I will use variable `password: "{{password}}"` . Then I can specify a variables file outside and set my password there  by using `vars_files` and set the name of the file 
+
+<img width="500" alt="Screenshot 2025-05-14 at 13 06 34" src="https://github.com/user-attachments/assets/862bd5ea-2eb3-4b56-8239-9e9eb316ecef" />
+
+ - Or one other way to set a variable value is using a variable prompt . So basically whe executing an Ansible Playbook I can prompt the user to enter the value and the user will have to enter that in the command line
+
+ - To do that there is a attribute `vars_prompt`
+
+ - I can use this either with `vars_prompt` and `vars_file`
+
+<img width="500" alt="Screenshot 2025-05-14 at 13 11 54" src="https://github.com/user-attachments/assets/e7a4bad9-9a70-4533-819a-4689aa149fd4" />
 
 
+Last task I want to run docker compose file that I copied into the server
 
+ - For that I will use `docker_compose` module (https://docs.ansible.com/ansible/latest/collections/community/docker/docker_compose_v2_module.html#ansible-collections-community-docker-docker-compose-v2-module)
 
+ - `project_src: <location_of_docker_compose_fle_on_the_Server>`
 
+ - `state: Present` docker compose up . This is also the default state
 
+```
+- name: Start Docker Containers
+  hosts: docker_server
+  vars_prompt: ### 
+    - name: docker_password
+      prompt: Enter password for docker registry
+  vars_file:
+    - project-vars ###
+  tasks:
+    - name: Copy Docker Compose
+      copy:
+        src: <Absolute path of the Docker Compose file> 
+        dest: /home/ec2-user/docker-compose.yamwl
+    - name: Docker login
+      docker_login:
+        user_name: nguyenmanhtrinh
+        password: "{{docker_password}}"
+    - name: Start Containers from Compose
+      community.docker.docker_compose_v2:
+        project_src: <location_of_docker_compose_fle_on_the_Server>
+        state: present ## docker compose up
+```
 
+#### Make the Playbook more generic
 
+With the configured Playbook above it will not work for another Distribute Linux Install on them
+
+Very Import to write Playbooks that can be run on many different Servers or can be run with minimum adjustments or can be run with minimum adjustment 
+
+One of the thing that I can do in this `Playbook` to make it little general purpose and not very specicfic to EC2 Instance is instead of using the EC2 user I will create a new user and use that and use that user to basically also excute all of the tasks
+
+I will change this Part
+
+```
+- name: Add ec2-user to Docker Group
+  hosts: docker_server
+  become: yes
+  tasks:
+    - name: Add ec2-user to Docker Group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+    - name: Reconnect to server session
+      meta: reset_connection 
+```
+
+I will create a new `play` . 
+
+  - I will create a new Linux user using `user` module . I add this user to admin group and docker group2
+
+  - In this case I don't have to reconnect to the server or reset the connection bcs we are not changing existing user groups, we are creating a new user with a group. This should be effective immediately
+
+  - Then with that user I can use it to execute all the tasks by using `become: yes` and `become_user: <user_name>` on every single `play` that I want this user to execute
+
+  - I also can parameterize a `groups : {{groups}}` like this and pass the value to a variables file
+
+```
+- name: Create new Linux User
+  hosts: docker_server
+  become: yes
+  tasks:
+    - name: Create new Linux user
+      user:
+        name: tim
+        groups: adm, docker
+```
 
