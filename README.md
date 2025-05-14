@@ -100,7 +100,23 @@
     
   - [Configure Git](#Configure-Git)
  
-  - [Configure Inventory Default Location](#Configure-Inventory-Default-Location) 
+  - [Configure Inventory Default Location](#Configure-Inventory-Default-Location)
+ 
+- [Ansible and Docker](#Ansible-and-Docker)
+
+  - [Ansible and Docker](#Ansible-and-Docker)
+ 
+  - [Adjust Inventory file](#Adjust-Inventory-file)
+ 
+  - [Frist Play Install Docker](#Frist-Play-Install-Docker)
+ 
+  - [Second Play Instal Docker Compose](#Second-Play-Instal-Docker-Compose)
+ 
+  - [Third Play Start Docker Daemon](#Third-Play-Start-Docker-Daemon)
+ 
+  - [Fourth Play Add ec2 user to Docker Group](#Fourth-Play-Add-ec2-user-to-Docker-Group)
+ 
+  - [Refactor the Playbook](#Refactor-the-Playbook)
 
 # Ansible-
 
@@ -1904,6 +1920,164 @@ inventory = <location-hosts-file>
 ```
 
 Having Ansible configuration file insde our Ansible project makes it very easy to have separate configuration for each project . If each project has it's own hosts file, basically I will just configure it in that projects 
+
+## Ansible and Docker
+
+In this part we will write an Ansible `playbook` to install Docker and Docker-compost on an AWS EC2 Server and using Docker Compose file from one of our projects we will then start the containers on that EC2 Server  
+
+First I will create AWS EC2 with Terraform 
+
+Second I will connect to a Server using Ansible . Configure Inventory file to connect to AWS EC2 Instance . Then I will write a `Playbook` that installs Docker and Docker Compose on the Server, then copies a Docker Compose file to the Server and then start container that are defined in the Docker Compose on that remote EC2 server 
+
+#### Create AWS EC2 Instance 
+
+I want to change an `image_name` to an newer version 
+
+In this Terraform configuration, we are creating a new key pair from our local public key, and that's an important information to SSH into the Server 
+
+Another thing is remove the `user_data`
+
+When I `terraform apply` I will have a server running with a IP address to ssh to server
+
+#### Adjust Inventory file 
+
+I will get a Public IP Address and pass it into `hosts` file 
+
+```
+[docker_server]
+3.75.173.238 ansible_ssh_private_key_file=~/.ssh/id_
+rsa ansible_user=ec2-user
+```
+
+#### Frist Play Install Docker 
+
+I will create another `Playbooks`  call `touch deploy-docker.yaml`
+
+To start with, I will write a play that just installs Docker on that EC2 Instance 
+
+ - To install Docker i will use a `yum` module instead . Bcs this Amazon-Linux actually use `yum` as a package manager
+
+ - As of recent Ansible versions (and modern Red Hat–based systems like CentOS 8+, RHEL 8+, Fedora), the yum module is officially a redirect to the dnf module. (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/dnf_module.html#ansible-collections-ansible-builtin-dnf-module)
+
+ - Compare to the Droplet where we have root access, here I am using a admin user not root, so to install a package I need to switch to a root user . To do that I will use `become: yes` and `become_user: root` 
+ 
+```
+---
+- name: Install Docker
+  hosts: docker_server
+  become: yes
+  become_user: root
+  tasks:
+    - name: Install Docker
+      ansible.builtin.dnf:
+        name: docker
+        update_cache: yes
+        state: present
+```
+
+#### Second Play Instal Docker Compose
+
+This `play` I will install Docker Compose 
+
+In EC2 we can not install docker-compose using `yum` bcs it is now a `yum` package 
+
+This time instead of installing Docker Compose as a standalone installation, we are going to install the docker compose CLI plugin which works more intuitively with ansible's docker modules . For `entry-script` we would do `yum update` and `yum install docker` 
+
+From the Docs I need to create `mkdir -p $DOCKER_CONFIG/cli_plugins` first and then complete the installation 
+
+So First task I will create a docker-compose directory using `file` module 
+
+Secode task I will install docker-compose . To get some thing from the internet I use `get_url` module
+
+<img width="442" alt="Screenshot 2025-05-14 at 11 39 01" src="https://github.com/user-attachments/assets/048d75d2-f906-4119-9ec6-1a7194d4544b" />
+
+ - `uname -s` : print out Linux
+
+ - `uname -m` : print out x86_64
+
+ - `curl -SL https://github.com/docker/compose/releases/download/v2.36.0/docker-compose-$(uname -s)-$(uname -m)` basically these are not just string or part of the string of the URL these are the encapsulated command and the way that I have this here `-$(uname -s)-$(uname -m)` it will not work, this will be interpreted as part of the string and not as a command
+
+ - I could hardcode it into this `curl -SL https://github.com/docker/compose/releases/download/v2.36.0/docker-compose-linux-x86_64`
+
+ - But I also can handle this by takeing the ouput of `uname -m` command and register it with a variable in a separate ansible task, so I will use `shell` command to run the `uname -m` and register it a variable then I can print out the value of it as `x86_64`
+
+ 
+Install Docker Compose Docs (https://docs.docker.com/compose/install/linux/)
+
+```
+---
+- name: Install Docker-Compose
+  hosts: docker_server
+  tasks:
+    - name: Create docker-compose directory
+      file:
+        path: ~/.docker/cli-plugins
+        state: directory
+    - name: Get architecture of remote machine
+      shell: uname -m
+      register: remote_arch
+    - name: Install Docker-Compose
+      get_url:
+        url: curl -SL https://github.com/docker/compose/releases/download/v2.36.0/docker-compose-linux-{{ remote_arch.stdout }}
+        dest: ~/.docker/cli-plugins/docker-compose
+        mode: +x
+```
+
+#### Third Play Start Docker Daemon
+
+I need to explicitly start docker with `sudo systemctl start docker` 
+
+To do it in Ansible I will use `systemd` module  
+
+  - `Systemd` module a redirect to the `ansible.builtin.systemd_service` module. (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/systemd_service_module.html#ansible-collections-ansible-builtin-systemd-service-module)
+
+```
+- name: Start docker
+  hosts: docker_server
+  become: yes
+  tasks:
+    - name: Start docker daemon
+      ansible.builtin.systemd_service:
+        name: docker
+        state: started
+```
+
+#### Fourth Play Add ec2 user to Docker Group 
+
+I need to add `ec2-user` to Docker Group so that we could then execute Docker commands with the `ec2-user` without using `sudo` like this : `sudo usermod -aG docker ec2-user`
+
+I will do it in Ansible by using `user` module 
+
+ - `user` module allow us to create new user or add existing to the groups (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/user_module.html#ansible-collections-ansible-builtin-user-module)
+
+After append `ec2-user` to a docker groups I need to disconnect the server and reconnect it again for it to work . I will create another task to reconnect to the server by using `meta` module (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/meta_module.html#ansible-collections-ansible-builtin-meta-module) . 
+
+```
+- name: Add ec2-user to Docker Group
+  hosts: docker_server
+  become: yes
+  tasks:
+    - name: Add ec2-user to Docker Group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+    - name: Reconnect to server session
+      meta: reset_connection 
+```
+
+#### Refactor the Playbook
+
+In Ansible it is very common standard to name the tasks base on what I desire to be an outcome once Ansible executes 
+
+Another thing is that we can basically decide depending on what makes the sense to me to group the tasks in the place in a different order 
+
+
+
+
+
+
+
 
 
 
