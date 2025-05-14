@@ -89,6 +89,8 @@
   - [Second Play](#Second-Play)
  
   - [find Module](#find-Module)
+ 
+  - [Conditionals in Ansible](#Conditionals-in-Ansible)
 
 # Ansible-
 
@@ -1531,6 +1533,22 @@ To do that I will create another task using `shell` module and execute `mv` comm
 
 To get a name of the remote server folder . I will create a task and using `find` module to find a folder name 
 
+`find` module useful for configuring stuff, creating folders, or maybe doing something with folders and files when I don't exactly know the name bcs it's either dynamic bcs of the version or maybe just gets updated (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/find_module.html#ansible-collections-ansible-builtin-find-module)
+
+<img width="500" alt="Screenshot 2025-05-13 at 16 53 45" src="https://github.com/user-attachments/assets/a93bc269-9e57-4df6-bc90-7e40093923b5" />
+
+ - `paths` Atribute I can specify where to look for that file or directory
+
+ - `pattern` This is a regular expression to match files or folders with some pattern . In this case I know it will start with `nexus-` alway but don't know what come after that
+
+ - `file_type`: by default is a file
+
+ - With those 3 attributes above configured it will find the Nexus folder inside the `/opt`
+
+ - Then I can save the result by using `register: find_result` . To see the result I can use `debug: msg={{find_result}}`
+
+ - Now I can use that `register: find_result` in the `shell` module to rename that folder
+ 
 ```
 - name: Download and unpack Nexus installer
   hosts: 134.122.333.444
@@ -1546,19 +1564,75 @@ To get a name of the remote server folder . I will create a task and using `find
       src: "{{download_result.dest}}"
       dest: /opt/
       remote_src: True
+  - name: Find Nexus folder
+    find:
+      paths: /opt
+      pattern: "nexus-*"
+      file_type: directory
+    register: find_result
   - name: Rename Nexus folder
-    shell: mv
+    shell: mv {{fine_result.files[0].path}} /opt/nexus
 ```
 
+#### Conditionals in Ansible
 
+If I execute `Playbook` again I will see an error in rename Nexus folder task and it said can not  move Nexus with version to `/opt/nexus` directory not empty . Basically first it detected in `Untar Nexus installer` that the package with `nexus-*` name not exist anymore bcs I already change the name above and then it will untar it agian and try to move that folder into a Nexus folder . But Nexus folder is not empty that is why it is failed 
 
+What's happening is that Ansible knows for all the other tasks that they already got executed so it doesn't acutally take try to execute them again . But for the `shell` task it executes on every single rerun
 
+ - For the `shell` and `command` modules Ansible doesn't the current State and Desired State, so it executes them all the time.
 
+That mean I need to tell Ansilbe if this `shell: mv {{fine_result.files[0].path}} /opt/nexus` already execute . 
 
+ - I want it to be skipped if it already a Nexus folder inside `opt` directory I can do that using `conditionals`
 
+<img width="500" alt="Screenshot 2025-05-13 at 17 23 40" src="https://github.com/user-attachments/assets/abb0d23e-4d23-4a3e-a8fc-fde4cb9ad678" />
 
+First I have a `stat` module can give me information whether a folder or file already exists (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/stat_module.html#ansible-collections-ansible-builtin-stat-module)
 
+ - `path` Atribute I can specify where to look for that file or directory
 
+ - This will give me information about or statistis about this folder
+
+ - Then I can use `register` to save the result . Then I can use `debug` module to print out the result . Then I can see the `exsist` attribute in `stat` module
+
+Now to use that information to make Ansilbe skip the `shell` command steps if the `exist` is True 
+
+ - I can do that by using `when` conditional . I can use that on any task
+
+ - I can say execute this task if `stat_result.stat.exists` not exist by using `when: not stat_result.stat.exists`
+
+ - This is going to be necessary for `shell` and `command` modules bcs, when I am creating an existing folder or moving to an existing folder or doing something that will result in an error if I execute it multiple times then I want to be able to skip it 
+
+```
+- name: Download and unpack Nexus installer
+  hosts: 134.122.333.444
+  tasks:
+  - name: Download Nexus
+    get_url:
+      url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+      dest: /opt/
+    register: download_result #
+  - debug: msg={{download_result}}
+  - name: Untar Nexus installer
+    unarchive:
+      src: "{{download_result.dest}}"
+      dest: /opt/
+      remote_src: True
+  - name: Find Nexus folder
+    find:
+      paths: /opt
+      pattern: "nexus-*"
+      file_type: directory
+    register: find_result
+  - name: Check Nexus folder stats
+    stat:
+      path: /opt/nexus
+    register: stat_result
+  - name: Rename Nexus folder
+    shell: mv {{fine_result.files[0].path}} /opt/nexus
+    when: not stat_result.stat.exists
+```
 
 
 
