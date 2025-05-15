@@ -128,7 +128,11 @@
  
 - [Ansible and Terraform](#Ansible-and-Terraform)
 
-  - [Intergrate Ansible Playbook execution in Terraform](#Intergrate-Ansible-Playbook-execution-in-Terraform) 
+  - [Intergrate Ansible Playbook execution in Terraform](#Intergrate-Ansible-Playbook-execution-in-Terraform)
+ 
+  - [Wait for EC2 Server to be fully initialized](#Wait-for-EC2-Server-to-be-fully-initialized)
+ 
+  - [Using null resource](#Using-null-resource)
 
 # Ansible-
 
@@ -2310,8 +2314,15 @@ Another the things we have to do here if we execute this Terraform script with t
  
  - and this `--inventory` flag take a file location as a parameter or a comma separated list of IP addresses. And if I am passing IP address just one IP address in this case, and not a file location I have to do `,` like this : `command = "ansible-playbook --inventory ${self.public_ip}, <Ansible-deploy-file>"` so Ansible knows we are passing the IP address not a file
 
+And now on the IP address, we have to specify the Private key location and the user, just like we did in the `hosts` file 
 
+ - And can specify those two also using flag and also parameterize the value `--private-key ${var.ssh_key_private}` .
 
+ - In the `terraform.tfvars` I will set `ssh_key_private = /User/trinhnguyen/.ssh/id_rsa` . This will be the private key location
+
+ - To specify user `--user ec2-user` . I can also parameterize it as well
+
+   
 ```
 resource "aws_instance" "myapp" {
   ami = data.aws_ami.amazon-linux-image.id
@@ -2334,12 +2345,82 @@ resource "aws_instance" "myapp" {
 
   provisioner "local-exec" {
     working_dir= <Path-to-Ansible-Project>
-    command = "ansible-playbook --inventory ${self.public_ip}, <Ansible-deploy-file>"
+    command = "ansible-playbook --inventory ${self.public_ip}, --private-key ${var.ssh_key_private} --user ec2-user <Ansible-deploy-file>"
   }
 }
 ```
 
+One more thing I have to change in this `Playbook` itself . In `hosts` I am reference `docker_server`. We don't have a Docker Server reference anymore, bcs we are passing in `--inventory` which is just IP address, so we need to reference that IP address instead of reference `docker_server` . I will defind `hosts: all`
 
+#### Wait for EC2 Server to be fully initialized 
+
+So now we have configured executing Ansilbe `Playbook` from Terraform script there is one thing about provisioners that I want to mention which is using provisoners are not the recommended way according to Terraform bcs Terraform doesn't have control over the Provisioner, so can not managed the State 
+
+ - So one of the problem we have with Provisioner is a timing issue , so by the time that this gets executed, the EC2 instance may not be fully created and initialized so basically when we executed a shell command here or even some other command, we might have an issue where the command already execute before the server is even able to get the request  
+
+In Ansible we can avoid this timing issue by controlling when to connect to the server, and that is actually very helpful if I actually have this problem and also to make sure that the server is fully accessible and it is possible to ssh into the Server by the time that Ansible playbook gets executed 
+
+To configure that in Ansible to fix the timing issue . At the beggining before we execute anything I will add the logic or basically we are gonna add a `play` that will check that the Server is already accessible on its SSH port and then we can start executing tasks on that Server 
+
+ - `gather_facts: False` we are not trying to gather facts at the beginning, we just to check that the SSH connection is possible
+
+ - I will use a module `wait_for` let us configure a criterion or basically some logic that tells Ansible to wait for this logic to be True before executing the next play (https://docs.ansible.com/ansible/latest/collections/ansible/builtin/wait_for_module.html#ansible-collections-ansible-builtin-wait-for-module)
+
+ - I can configure waiting for a Port to be open on a Server and that what's I gonna use . So basically we gonna say wait for port 22, which is ssh port to be open
+
+ - We can add the `delay` start checking ssh port is open after 10s
+
+ - We can also add `timeout` to 100s to basically wait for that amount of time
+
+ - `search_regex: OpenSSH` Which basically mean, so we want the port 22 to be open but also contain open SSH
+
+ - And important part is on which host we are waiting for port to be open `host: '{{ (ansible_ssh_host|default(ansible_host))|default(inventory_hostname) }}'`
+
+ - Also add `ansible_connection: Local` mean that we want execute this task locally, so from our local host we want to connect to the host that we get as a parameter and on that host we want to check these conditions
+
+ - Also add `ansible_python_interpreter: /usr/bin/python3`
+
+```
+- name: Wait for SSH connection
+  hosts: all
+  gather_facts: False
+  tasks:
+    - name: Ensure SSH port open
+      wait_for:
+        port: 22
+        host: '{{ (ansible_ssh_host|default(ansible_host))|default(inventory_hostname) }}'
+        delay: 10
+        timeout: 100
+        search_regex: OpenSSH
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: /usr/bin/python3
+```
+
+#### Using null resource
+
+Another way to execute a provisioner if we want to separate it from AWS instance `resource` and have it as a separate task. 
+
+In Terraform we can do that using a resource type called `null_resource`. 
+
+`null_resource` is basically a Terraform provider that give us this `null_resource` type that we can use if we are not creating any specific resource on a cloud provider, or some other other platform, but we just want to execute some command either locally or remotely on the target machine 
+
+```
+resource "null_resource" "configure_server" {
+  triggers = {
+    trigger = aws_instance.myapp-server.public_ip
+  }
+
+  provisioner "local-exec" {
+    working_dir= <Path-to-Ansible-Project>
+    command = "ansible-playbook --inventory ${aws_instance.myapp-server.public_ip}, --private-key ${var.ssh_key_private} --user ec2-user <Ansible-deploy-file>"
+  }
+}
+```
+
+Now we have a separate task or resource for Ansible playbook execution, and I can use this for `remote exec`, `local exec` . But I have to adjust the `${self.public_ip}` bcs we don't have this self reference anymore, bcs we are outside of the aws instances resource . We can just easily reference it the `aws_instance resource` like this  `${aws_instance.myapp-server.public_ip}`
+
+In `null_resource` we also have `triggers` attribute , Optional  but using `triggers` we can tell Terraform when to run `null_resource` . In our case we can configure Terraform to execute this `null_resource` or execute the Ansible Playbook acutally inside whenever a new server is created or basically whenever the ip address of that aws instance resource changes, so we know that a new server got created, so we need to run Ansible playbook
 
 
 
