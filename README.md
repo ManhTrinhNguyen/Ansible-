@@ -133,6 +133,16 @@
   - [Wait for EC2 Server to be fully initialized](#Wait-for-EC2-Server-to-be-fully-initialized)
  
   - [Using null resource](#Using-null-resource)
+ 
+- [Dynamic Inventory](#Dynamic-Inventory)
+
+  - [Terraform Create EC2](#Terraform-Create-EC2)
+ 
+  - [Inventory Plugin and Inventory Script](#Inventory-Plugin-and-Inventory-Script)
+ 
+  - [AWS EC2 Plugin](#AWS-EC2-Plugin)
+ 
+  - [Write plugin configuration](#Write-plugin-configuration)
 
 # Ansible-
 
@@ -2421,6 +2431,119 @@ resource "null_resource" "configure_server" {
 Now we have a separate task or resource for Ansible playbook execution, and I can use this for `remote exec`, `local exec` . But I have to adjust the `${self.public_ip}` bcs we don't have this self reference anymore, bcs we are outside of the aws instances resource . We can just easily reference it the `aws_instance resource` like this  `${aws_instance.myapp-server.public_ip}`
 
 In `null_resource` we also have `triggers` attribute , Optional  but using `triggers` we can tell Terraform when to run `null_resource` . In our case we can configure Terraform to execute this `null_resource` or execute the Ansible Playbook acutally inside whenever a new server is created or basically whenever the ip address of that aws instance resource changes, so we know that a new server got created, so we need to run Ansible playbook
+
+## Dynamic Inventory
+
+Let say we have an infrastructure that we are managing with Anisble which is very dynamic, meaning new server get added and deleted all the time . And this is actually a very common practice when I have an infrastructure that has some auto-scaling maybe configured so whenever I have high demand for Server resources I basically scale up, I add a couple of new servers when I don't need that much resources, I scale them down 
+
+In this case as I can imagine having a static list of inventory for Ansible doesn't make any sense, bcs IP address will change all the time .
+
+We need some way to dynamically set the IP address or DNS names of the Servers that Ansible should manage 
+
+Previous example we saw a case where we created a server using Terraform and then we used Terraform to hand over the control to Ansible and execute an Ansbile playbook command using that newly created Server instances, which was also an example of setting an IP address of of  the controlled node for Ansible using a Variable 
+
+In this case we will execution of Terraform and Ansible again, so we will create 3 EC2 Instances using Terraform and then we are going to go to Ansible project to connect to those 3 Servers and configure them without hard coding the IP address of those Servers . Basically dynamically getting or fetching the information about the server IP address and using that in Ansible 
+
+#### Terraform Create EC2 
+
+To create 3 server I just need to replicate 3  `resources aws_instance` and give it 3 different name
+
+For the third server I will set another `instance_type = "t2.small"`
+
+Save it and create a Iac `terraform init` then `terraform apply`
+
+ New server get added and removed all the time I want to fetch that information from AWS dynamically . We don't know how many Servers running on AWS account we don't know  what the IP addresses of them are, what Instance types etc . We just know that there are some servers running and we want to configure all of them using our Ansible playbooks 
+
+ #### Inventory Plugin and Inventory Script 
+
+For configuring a dynamic inventory for Ansible, we would need to connect to the AWS account from Ansible and fetch the information about the server instances from a specific region and get the Public IP address or public DNS name for all those Servers . 
+
+So we need basically a functionallity in Ansible that is able to do all of that
+
+ - Connect to AWS account and get server information
+
+ For that we have 2 options in Ansible . (https://docs.ansible.com/ansible/latest/inventory_guide/intro_dynamic_inventory.html)
+
+  - Dynamic inventory plugins
+
+  - Dynamic inventory script
+
+Ansible recommended to use Dynamic Inventory Plugins over Dynamic Iventory Script 
+
+ - The main reason is bcs Plugins can use of Ansible Fetures like State Management
+
+Inventory Plugis written in Yaml, Inventory Script are written in Python  
+
+So the YAML format and the plugin functionality basically is part of the Ansible general formats and the inventory plugins also use all the Ansible Features and also the plugins use most of the recent updates of the Ansible code itself 
+
+The script do not have that advangtages 
+
+For both Inventory plugins and inventory scripts we have a list of them for different infrastructure providers  
+
+ - If we connecting to an AWS account bcs we want inventory from AWS then we will need inventory plugin for AWS specifically
+
+ - And If I am using Google or other platfor, I would need to find inventory plugin or script for that specific provider
+
+ - In this case I will find an inventory plugin for AWS EC2  
+
+#### AWS EC2 Plugin
+
+(https://docs.ansible.com/ansible/latest/collections/amazon/aws/aws_ec2_inventory.html)
+
+If I want to use this plugin then I have to have Python modules, installed locally on my Laptop and the I will able to use that . I also need Boto3 and Botocore install locally
+
+Now go back to Ansible project. First thing I need to do is in the Ansible configuration `ansible.cfg`,  we need to enbale AWS EC2 plugin
+
+ - I will use `enable_plugins` to enable aws ec2 plugins . This could be a list of plugin 
+
+```
+enable_plugins = aws_ec2
+```
+
+#### Write plugin configuration
+
+Now in this project I will create a new file and this is going to be our plugin configuration file `inventory_aws_ec2.yaml`
+
+This is an important part about naming of this file . The last part of the name of this file has to be `aws_ec2`. Otherwise the plugin will not be able to recognize or identiry our plugin file  
+
+<img width="500" alt="Screenshot 2025-05-14 at 19 08 49" src="https://github.com/user-attachments/assets/e7845723-73ed-4286-b0e4-19f61658586c" />
+
+To write the plugin configuration we need the name of the plugin which is aws ec2
+
+Now comes the attributes or configuration for the plugin 
+
+ - First configuration we need is which region of AWS we want to check our inventory from . We can have multiple regions 
+
+```
+---
+plugin: aws_ec2
+regions:
+  - us-west-1
+```
+
+Example above basically we just enables the plugin and then we configure that plugin to tell it which region to connect to . With that configuration now I can execute out plugin separately without any playbook execution and see what it returns 
+
+So we can bascially just test it to see that we get the list of EC2 Instances . And for testing just the inventory plugin there is acutally a convenient to do that using `ansible-inventory`  command . 
+
+<img width="500" alt="Screenshot 2025-05-14 at 19 18 37" src="https://github.com/user-attachments/assets/f5323f7a-ac67-47cb-a095-90931ba2a904" />
+
+And to do that `ansible-inventory` command will take a parameter for inventory `ansible-inventory -i <file of inventory plugin> --list`
+
+ - `--list` use to list a result
+
+ - Once executed I have a huge output in the terminal. We have all the data with alot of attributes for all the Servers that this inventory plugin was able to fetch from AWS .  
+
+Important to differenciate here we are not connecting to the Server yet . We are not ssh-ing into the Servers . We are not connecting to it bcs we haven't defined the private key or the server user here . We are just connect to AWS account and basically fetching the information about the server using the Python boto module 
+
+If I don't want to see this huge ouput of all the information about the server, we only want the ouput of the server host names . We can do `ansible-inventory -i <plugin yaml file> --graph`
+
+
+
+
+
+
+
+
 
 
 
