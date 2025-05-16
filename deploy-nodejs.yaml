@@ -1,0 +1,52 @@
+---
+- name: Install nodejs and npm
+  hosts: 164.92.98.29
+  tasks:
+    - name: Update apt repo and cache
+      apt:
+        update_cache: yes
+        force_apt_get: yes
+        cache_valid_time: 3600
+    - name: Install nodejs and npm
+      apt:
+        pkg:
+          - nodejs
+          - npm
+
+- name: Create Linux user for node App
+  hosts: 164.92.98.29
+  tasks: 
+    - name: Create Linux user
+      user: 
+        name: tim
+        comment: tim nguyen
+        group: admin
+
+- name: Deploy Nodejs App
+  hosts: 164.92.98.29
+  become: true
+  become_user: tim
+  tasks:
+    - name: Copy file to Remote server
+      copy:
+        src: ./node-app/nodejs-app-1.0.0.tgz
+        dest: /home/tim/nodejs-app-1.0.0.tgz  
+    - name: Unpack the Nodejs file
+      unarchive:
+        src: /home/tim/nodejs-app-1.0.0.tgz 
+        dest: /home/tim/
+        remote_src: yes
+    - name: Install Dependencies
+      community.general.npm:
+        path: /home/tim/package
+    - name: Start Application
+      command: 
+        chdir: /home/tim/package/app
+        cmd: node server
+      async: 1000
+      poll: 0
+    - name: Ensure app is running
+      shell: ps aux | grep node
+      register: app_status
+    - debug: msg={{app_status}}
+

@@ -1,7 +1,7 @@
-[webserver]
-157.230.29.95 
-157.230.23.199 
+[droplets]
+164.92.98.29
 
-[webserver:vars]
+[droplets:vars]
 ansible_ssh_private_key_file=~/.ssh/id_rsa
 ansible_user=root
+ansible_python_interpreter=/usr/bin/python3
