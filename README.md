@@ -145,6 +145,12 @@
   - [Write plugin configuration](#Write-plugin-configuration)
  
   - [Assign public DNS to EC2 Instances](#Assign-public-DNS-to-EC2-Instances)
+ 
+  - [Configure Ansible to use dynamic inventory](#Configure-Ansible-to-use-dynamic-inventory)
+ 
+  - [Target only Specific Servers](#Target-only-Specific-Servers)
+ 
+  - [Create Dynamic Groups](#Create-Dynamic-Groups)
 
 # Ansible-
 
@@ -2565,8 +2571,122 @@ To fix that We will change our Terraform configuration so that when it creates t
 
  - I will add `enable_dns_hostnames = true` to `resources "aws_vpc" ""` . Now it will take care of that problem 
 
+Now I have the Public DNS name and this will be use in the Playbook to connect to the Server 
 
+#### Configure Ansible to use dynamic inventory 
 
+ Basically now I have the `hosts` file configured in `ansible.cfg` by default as a `inventory = hosts` . 
+
+ So instead of the `hosts` file we want our `playbook` to basically use that `inventory plugin` whenever playbook gets executed 
+
+To do that . First in the `Playbook` we need to have a reference to the `host` that the plugin actually returns 
+
+ - We can do either `all` that we used previously when we exected Ansible from Terraform project
+
+ - Or we acutally have a group name that we get by default, which is `aws_ec2`
+   
+<img width="400" alt="Screenshot 2025-05-16 at 11 21 48" src="https://github.com/user-attachments/assets/fdb6f978-4624-4a54-9667-252faecd7c6a" />
+
+ - We can use `aws_ec2` group name in the `hosts` instead of `all` and this will set the hosts to all the value that AWS EC2 group contains  
+
+And second thing is whenever we are connecting to the `hosts` we need a username and the Private SSH key 
+
+And if we want them set globally we can configure them inside the Ansible configuration file `ansible.cfg` . So we could pass those the user and private key file as parameters to Ansible Playbook command like we did in the Terraform configuration . Or if we want to spare us setting them as parameters we can just globally configure them 
+
+So in `ansible.cfg` I will set `remote_user = ec2-user` and `private_key_fike = ~/.ssh/id_rsa`
+
+So we have everything ready and configured to execute `Playbook` on those 3 servers . `ansible-playbook deploy-docker-new-user.yaml` . 
+
+And we need to tell Ansible do not take `hosts` file but take the `inventory_aws_ec2.yaml` . The complete command will look like this : `ansible-playbook -i inventory_aws_ec2.yaml deploy-docker-new-user.yaml`
+
+If we decide we alway gonna use the Inventory plugin as a Inventory source for our `Playbook` we could make `inventory_aws_ec2.yaml` as a default `hosts` file  like this in `ansible.cfg` -> `inventory = inventory_aws_ec2.yaml`
+
+#### Target only Specific Servers
+
+Now let say we don't want to execute the `Playbook` on all the Server we may want just target on some of the Server and not all of them 
+
+ In terraform I will configure 2 dev server and 2 prod server as a Tag 
+
+Imagine we may have 10 development Servers, 20 Staging Servers and 20 Production Servers . We may want to execute different `Playbooks` on different types of Servers . 
+
+We may have a `playbook` for development server and slightly different one on production server 
+
+To configure this dynamic plugin to give us only the `dev servers` or only the `prod servers` and not just everything from that region 
+
+ - In the plugin configuration I can use `filters` to filter the Server I want to get as a result instead of just getting all of them by default .
+
+ - And to know the attributes that I can use as filters I can actually reference the list (http://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instances.html#options.) right here
+
+ - I can use any of that attribute as a filter . In our case we have tag name configure for each server . So we want to filter base on the tag name .
+
+```
+filters:
+  tag:Name: dev*
+```
+
+ - The configuration above will give me a server with the tag name `dev`
+
+ - To test that I can execute `ansible-inventory -i inventory_aws_ec2.yaml --graph`
+
+ #### Create Dynamic Groups 
+
+Now it could be that using that inventory plugin, we want to acutally return both Dev server and production server, but we want to differentiate them . We want to group them into separate group 
+
+Intead of having everything in AWS EC2 groups, we want to have own group for `dev servers`, own group for `production servers`
+
+And for that we can use another configuration which is called `keyed_group`
+
+ - `keyed_group` actually has a list of configuration
+ 
+   - `key` : What do we want or what attribute of the information of the instances do we want to use for grouping . In this case I want to use `tags`. `key: tags`
+  
+   - The different in the `keyed_groups` we use the key names, which are one of the attributes that we have . For the filters we used a different attribute lit provided by filters configuration
+  
+   - For `keyef_groups`. We actually look for the attributes that we get on the Instances
+  
+   - With this configuration we gonna get additional group that are group by `tags`. So we have 1 tag for each server which is name tag . So we gonna get 2 groups, one for developed Server and one for production Server
+  
+```
+plugin: aws_ec2
+regions:
+  - us-west-1
+keyed_groups:
+  - key: tags
+```
+
+After executed that we still have common list where all the servers are listed so we can address all the servers with this group . And in addtion to that we have separate one for `_Name_dev_server` and `_Name_prod_server`
+
+If we don't want to start with underscore we can add `prefix`
+
+```
+plugin: aws_ec2
+regions:
+  - us-west-1
+keyed_groups:
+  - key: tags
+    prefix: "tag"
+```
+
+That mean if I want to execute this `playbook` only for the dev servers, I will going to copy the name of the group and set that as `hosts` value instead of the whole AWS EC2 lists
+
+Now I can execute the playbook `ansible-playbook deploy-docker-new-user.yaml`
+
+Now we know how to target server by grouping them together, and `tags` is just one of the keys that I can use to group instances . I can also use the image name and other attributes and I can acutally create multiple group . So we can leave this with the text, the grouping with text and we can add another one .
+
+Let say in addition I want to froup the server based on their instance type 
+
+ - I will take the attribute call `instance_type`
+
+```
+plugin: aws_ec2
+regions:
+  - us-west-1
+keyed_groups:
+  - key: tags
+    prefix: "tag"
+  - key: instance_type
+    prefix: instance_type
+```
 
 
 
