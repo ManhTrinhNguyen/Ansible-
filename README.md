@@ -143,6 +143,8 @@
   - [AWS EC2 Plugin](#AWS-EC2-Plugin)
  
   - [Write plugin configuration](#Write-plugin-configuration)
+ 
+  - [Assign public DNS to EC2 Instances](#Assign-public-DNS-to-EC2-Instances)
 
 # Ansible-
 
@@ -2537,8 +2539,31 @@ Important to differenciate here we are not connecting to the Server yet . We are
 
 If I don't want to see this huge ouput of all the information about the server, we only want the ouput of the server host names . We can do `ansible-inventory -i <plugin yaml file> --graph`
 
+ - Then I will have a cleaner output with one group which is called AWS EC2 and the 3 Server
 
+ - This is basically the equipvelent of the entry of the IP address in the `hosts` file
 
+ - The Result in the terminal is a DNS name which then `Playbook` would use to connect to the Instances
+
+ #### Assign public DNS to EC2 Instances 
+
+This is a DNS name of the Instances which are private DNS name . Not public DNS that we can use to connect to the Server 
+
+<img width="400" alt="Screenshot 2025-05-16 at 10 51 34" src="https://github.com/user-attachments/assets/af521e2b-c90a-4bca-a30f-b90fe6de443f" />
+
+Important thing to know about AWS EC2 Dynamic Inventory is that if our Instances do not have Public DNS name assigned, we get the private DNS name
+
+In order to be able to connect to the Servers using the Private DNS or Private IP address, our Ansilbe command would need to be executed from inside the VPC where the Server are running
+
+If we want to connect to the VPC from **outside** the VPC, in this case from my Laptop I would need to use a Public DNS name or Public IP address
+
+To fix that We will change our Terraform configuration so that when it creates these 3 Servers, all of the gets assigned a public DNS name 
+
+ - Go back to Terraform and configure my Server to get the Public DNS automatically assigned .
+
+ - That Configuration is acutally on the VPC level and not on the Instance level
+
+ - I will add `enable_dns_hostnames = true` to `resources "aws_vpc" ""` . Now it will take care of that problem 
 
 
 
