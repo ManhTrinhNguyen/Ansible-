@@ -154,7 +154,13 @@
  
 - [Deploying Application in Kubernetes](#Deploying-Application-in-Kubernetes)
 
-  - [Create EKS Cluster with Terraform](#Create-EKS-Cluster-with-Terraform) 
+  - [Create EKS Cluster with Terraform](#Create-EKS-Cluster-with-Terraform)
+ 
+  - [Create a Namespace in EKS Cluster](#Create-a-Namespace-in-EKS-Cluster)
+ 
+  - [Deploy App in new Namespace](#Deploy-App-in-new-Namespace)
+ 
+  - [Set ENV for kubeconfig](#Set-ENV-for-kubeconfig)
 
 # Ansible-
 
@@ -2700,6 +2706,140 @@ Once I have Kubernetes Cluster running we will configure Ansible to connect to t
 
 
 #### Create EKS Cluster with Terraform 
+
+This is a Terraform Project to create EKS Cluster (https://github.com/ManhTrinhNguyen/Terraform-Exercise) . 
+
+I will switch to `eks branch` then I will create Terraform using by execute `terraform init` and `terraform apply --auto-approve`
+  
+
+#### Create a Namespace in EKS Cluster 
+
+First I need to update `kubeconfig` file to connect to cluster  
+
+ - This `kubeconfig` file include all the information needed to connect to our cluster like the Server Address, The hostname, certificates and so on
+
+ - This information is what I will use to connect to the Cluster using Ansible
+
+ - To generate `kubeconfig` file : `aws eks update-kubeconfig --region us-west-1 --name <Cluster-Name> --kubeconfig ~/terraform/kubeconfig_myapp-eks-cluster` . This command will finds the the `kubeconfig` of our Cluster after we define the region and the cluster name and create the file in the location we specify at the end here `--kubeconfig ~/terraform/kubeconfig_myapp-eks-cluster`
+
+ - But first I need to create this file `kubeconfig_myapp-eks-cluster` in the directory and then the `kubeconfig` file will be saved in this location for me to use
+
+Once a I have `kubeconfig` file I will switch back to Ansible project and create a file `touch deploy-to-k8s.yaml`
+
+There is a Kubernetes module from Ansible (https://docs.ansible.com/ansible/latest/collections/kubernetes/core/k8s_module.html)
+
+This make K8s very easy to create components to delete components, to configure stuff there . Basically instead of me running `kubectl` commands or actually even needing `kubectl` installed on my server, I can use this Kubernetes module to connect to the Kubernetes and basically do anything I want inside there 
+
+First I will create a new Namespace 
+
+```
+---
+- name: Deploy app in new namespace
+  tasks:
+   - name: Create a k8s namespace
+     kubernetes.core.k8s:
+       name: my-app
+       api_version: v1
+       kind: Namespace
+       state: present
+```
+
+We have something very similar to Kubernetes configuration file and that's actually not a coincidence bcs as =you see both K8s and Ansible use yaml as a configuration file, so basically they kept the same attribute names  
+
+I could write the whole Kubernetes configuration file directly in my Ansible `play` 
+
+There is 3 more things I have to configure :
+
+ - First is : `hosts: "localhost"` . I use `localhost` bcs I am executing Ansible `playbook` locally but I am actually connecting to a Kubernetes Cluster, so we don't need a specific worker node host or Kubernetes endpoint bcs we will define that seperately
+
+ - Second I need to configure for Ansible acutally know which Cluster to connect to and how to connect to that Cluster . Basically it needs the address and it needs credentials which is exactly what I have in this `kubeconfig` file `kubeconfig_myapp-eks-cluster` . The way cinfigure that in Ansible is using the `kubeconfig` attribute from Ansible . This attribute points to the path of this `kubeconfig` file, by default if I don't specify that it will point to `~/.kube/config` . If my kubeconfig file is somewhere else then I have to set this path
+
+ - Final I have the requirments basically for using this module or executing this module which are `python >= 3.9`, `kubernetes >= 24.2.0`, `PyYAML >= 3.11`, `jsonpatch` on the host where I execute the Ansible command these requirement should be fullfilled
+
+ - If I am unsure whether I already have these module or not I can check that by using : `python3 -c "import kubernetes"` . If `PyYAML >= 3.11`  I can use `python3 -c "import YAML"` . If `jsonpatch` I can use `python3 -c "import jsonpatch"`
+
+<img width="630" alt="Screenshot 2025-05-17 at 11 17 50" src="https://github.com/user-attachments/assets/c39b3a69-22fa-4bda-86c7-6b62dc01fabd" />
+
+ - To install those packages or modules I will get inside Ansible project and use Python Virtual Environment .  
+
+```
+python3 -m venv ansible-env
+source ansbile-env/bin/activate
+python3 -m pip install <package-name>
+```
+
+ - I need to go to `ansible.cfg` and change to `inventory = hosts`. Bcs previous I set that to dynamic inventory so I will try to execute the plugin in the background
+
+Now everything configured I can execute it `ansible-playbook deploy-to-k8s.yaml`
+
+```
+---
+- name: Deploy app in new namespace
+  hosts: localhost
+  tasks:
+   - name: Create a k8s namespace
+     kubernetes.core.k8s:
+       name: my-app
+       api_version: v1
+       kind: Namespace
+       state: present
+       kubeconfig: <absolute-path-to-kubeconfig>
+```
+
+Now I have a namespace created 
+
+#### Deploy App in new Namespace
+
+I will create another task 
+
+This time I want to deploy or create Kubernetes component from the Kubernetes configuration file itself . 
+
+I have a simple nginx app deployment here `Ansible/nginx-config.yaml`
+
+To deploy from Kubernetes yaml configuration file itself I will use `src` attribute 
+
+ - `src` point to the file that contains Kubernetes Yaml configuration
+
+ - `state: present` to create file `state: absent` to delete file
+
+ - I also need kubeconfig context
+
+ - `namespace: my-app` : To deploy in this namespace
+
+```
+---
+- name: Deploy app in new namespace
+  hosts: localhost
+  tasks:
+   - name: Create a k8s namespace
+     kubernetes.core.k8s:
+       name: my-app
+       api_version: v1
+       kind: Namespace
+       state: present
+       kubeconfig: <absolute-path-to-kubeconfig>
+   - name: Deploy Nginx App
+     kubernetes.core.k8s:
+       src: <absolute-path-to-yaml-file>
+       state: present
+       kubeconfig: <absolute-path-to-kubeconfig>
+       namespace: my-app
+```
+
+Now I can execute it `ansible-playbook deploy-to-k8s.yaml`
+
+#### Set ENV for kubeconfig
+
+If I have a lot of task here in Kubernetes module then it would be very inconvenient to use `kubeconfig` attribute in every single task . 
+
+I want to define a `kubeconfig` once for Ansible and then basically use that for the whole `playbook`
+
+I can set an ENV `K8S_AUTH_KUBECONFIG` before executing Ansible that points to the `kubeconfig` and Ansible then know where to get this information and will use that for all tasks .
+
+ - To do that : `export K8S_AUTH_KUBECONFIG=<absolute-path-to-kubeconfig>`
+
+ - Now I can delete all the kubeconfig in all task
+
 
 
 
