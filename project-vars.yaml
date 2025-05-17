@@ -1,0 +1,3 @@
+node_file_location: ./node-app/nodejs-app-1.0.0.tgz
+destination: /home/tim
+linux_name: tim
