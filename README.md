@@ -151,6 +151,10 @@
   - [Target only Specific Servers](#Target-only-Specific-Servers)
  
   - [Create Dynamic Groups](#Create-Dynamic-Groups)
+ 
+- [Deploying Application in Kubernetes](#Deploying-Application-in-Kubernetes)
+
+  - [Create EKS Cluster with Terraform](#Create-EKS-Cluster-with-Terraform) 
 
 # Ansible-
 
@@ -2687,6 +2691,30 @@ keyed_groups:
   - key: instance_type
     prefix: instance_type
 ```
+
+## Deploying Application in Kubernetes
+
+First I will create a Kubernetes Cluster on AWS using Terraform script that we created in Terraform module 
+
+Once I have Kubernetes Cluster running we will configure Ansible to connect to that EKS Cluster and deploy a simple Deployment and service component inside the Cluster
+
+
+#### Create EKS Cluster with Terraform 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
