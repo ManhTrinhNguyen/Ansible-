@@ -164,7 +164,13 @@
 
 - [Run Ansible from Jenkins Pipeline](#Run-Ansible-from-Jenkins-Pipeline)
 
-  - [Prepare Ansible Control Node](#Prepare-Ansible-Control-Node)  
+  - [Prepare Ansible Control Node](#Prepare-Ansible-Control-Node)
+ 
+  - [Create 2 EC2 Instances to be managed by Ansbile](#Create-2-EC2-Instances-to-be-managed-by-Ansbile)
+ 
+- [Ansible Integration in Jenkins](#Ansible-Integration-in-Jenkins)
+ 
+  - [Copy files from Jenkins to Ansible Server Jenkinfile](#Copy-files-from-Jenkins-to-Ansible-Server-Jenkinfile)
   
 
 # Ansible-
@@ -2875,7 +2881,80 @@ Next step I will ssh into that Server and Install Ansible . `ssh root@<ip addres
 
  - To Install ansible : `apt install ansible-core`
 
- - I also need to install Python module for AWS bcs Ansible is based on Python so whenever we want to execute certain tasks from Ansible on AWS servers for some of the tasks we will need the Python module for AWS which Ansible will then use in the background . Those Python module is `boto3` and `botocore`. To install `boto3` on Linux: `apt install python3-boto3` after installed this , this is also install `boto-core` as a dependency
+ - I also need to install Python module for AWS bcs Ansible is based on Python so whenever we want to execute certain tasks from Ansible on AWS servers for some of the tasks we will need the Python module for AWS which Ansible will then use in the background . Those Python module is `boto3` and `botocore`. To install `boto3` on Linux: `apt install python3-boto3` after installed this , this is also install `boto-core` as a dependency at the same time
+
+ - Last thing I need AWS credentials configured on the Server .
+
+   - We can connect to EC2 Instances using the private SSH key using Ansible . We don't need AWS credentials for that
+  
+   - However we will be using a `dynamic inventory` for the `Playbook` so instead of hard coding the EC2 Instance IP addresses we can basically just get the dynamically from AWS and we need AWS crednetials for that `dynamic inventory` to work . So the `aws_ec2` inventory plugin in the background will try to connect to AWS to fetch all the EC2 Instances from our AWS Account and we need to authenticate
+  
+   - The default location for AWS credentials is `.aws` in user home directory . Create `.aws` folder `mkdir .aws`
+  
+   - Inside `.aws` we will create `vim credentials` . I can copy the AWS credentiasl from my local machine
+  
+
+Wrap up : So we have Ansible installed, we have `boto3` and `boto-core` python module installed and we have AWS credentials ready and the `boto` library and credentials are there when we need to use `dynamic inventory` bcs then the plugin will need to authenticate with AWS 
+
+#### Create 2 EC2 Instances to be managed by Ansbile
+
+Now we will create 2 EC2 Instances the we want to configure with Ansible Playbook
+
+I will go to AWS Dashboard and launch 2 AWS Linux Iamge Instances 
+
+ - I need to create a new SSH key . Bcs Ansible need this key to connect to the Instances that need to configure . This is a key that I need to provide Ansible so that it can connect to and configure our EC2 Instances
+
+
+## Ansible Integration in Jenkins
+
+#### Copy files from Jenkins to Ansible Server Jenkinfile
+
+Now we have our Ansiblr Control Node and we have our Ansible managed Nodes. Now it is time for everything to come to together and basically to call the Ansible Control Node to configure those managed nodes and do that from a Jenkins pipeline 
+
+For that We will configure Jenkin and we will write a Jenkinsfile with all the necessary steps 
+
+I will start with writing Jenkinsfile that copies all the necessary files to a remote Ansible Server and then executes an Ansible Playbook on the remote server 
+
+In my Java project I will create a new branch call `git checkout -b ansible`
+
+I will create a new Jenkinsfile from sratch 
+
+First stage is `stage('copy files to ansible server)` 
+
+What files we need to copy to Ansible Server so we can execute Ansible the Playbook
+
+- When we execute Ansible Playbook we need the Playbook itself, that basically does and executes all these steps
+
+- We also need `hosts` files or `dynamic inventory` . In this case I will use `aws_ec2` Inventory file
+
+- We also need `ansible.cfg`
+
+Those 3 files is what we will need so that we can execute Ansbile Playbook on a remote server which mean that we have to include these 3 files in my Java App project so then Jenkins have access to them and copy them to Ansible Server 
+
+- In Java App create a folder `mkdir ansible` . And copy
+
+  - `inventory_aws_ec2.yaml`
+ 
+  - `ansible.cgf`
+ 
+    - I need to configure `inventroy = inventory_aws_ec2.yaml`
+   
+    - I also have this `private_key_file = ~/.ssh/id_rsa` locally when I execute from my Laptop . This was my home folder and was my private key . However, this time we have `pem` file from AWS key pair that we created and we will copy that `pem` file to Ansible server from Jenkins and we can decide what that `pem` file is going to be called on Ansible Server let's say `~/ssh-key.pem` in the root users home directory 
+   
+      
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
