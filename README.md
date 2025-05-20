@@ -171,6 +171,10 @@
 - [Ansible Integration in Jenkins](#Ansible-Integration-in-Jenkins)
  
   - [Copy files from Jenkins to Ansible Server Jenkinfile](#Copy-files-from-Jenkins-to-Ansible-Server-Jenkinfile)
+ 
+  - [Create Jenkins pipeline](#Create-Jenkins-pipeline)
+ 
+  - [Execute Ansible Playbook from Jenkins](#Execute-Ansible-Playbook-from-Jenkins)
   
 
 # Ansible-
@@ -2953,7 +2957,7 @@ Now I will configure my Jenkinsfile :
 
 - To copy files generally from Jenkins to some remote Server I will use `sshAgent` plugin
 
-- `sshAgent` plugin allow me to use SSH key to connect to a remote server and basically copy all the files to that server using simple `scp` command
+- `sshagent` plugin allow me to use SSH key to connect to a remote server and basically copy all the files to that server using simple `scp` command
 
 - I need the ssh key to connect to that remote server that I am trying to connect from Jenkins . In this case I am connecting to the Ansible Server . So I need the ssh key for that Server . On droplet I am acutally using my Private key . Now I use that Private Key to create new Credentials In Jenkins which is `SSH username with private key` . username is `root`
 
@@ -2961,24 +2965,107 @@ Now I will configure my Jenkinsfile :
 
 - `ssh-keygen -p -f .ssh/id_rsa -m pem -P "" -N ""` this command will basically take my newly formatted or private key with a new OPEN SSH Format conver it to the Classic OpensSH format which will then be compatible for Jenkins so that I can use it then I will see `BENGIN RSA PRIVATE KEY`
 
+- `sshagent([''])` syntax
+
+  - As a parameters we are providing the credentials ID of the SSH key credentials that we created . So `sshagent` will take that private key and use that or make availalbe inside this block for all the `ssh` or `scp` command
+ 
+  - `sh "scp -o StrictHostKeyChecking=no ansible/*" root@<remote-ip-address>:/root` this command basiscally I want to copy anything from `ansible` folder
+ 
+  - Now I want to copy the ssh `pem` key file to Ansbile Control Node . Which mean I should have this `pem` file available in Jenkins first so Jenkins can copy that Ansible . I will create a new Credentails in Jenkins from the `.pem` file format `SSH username with private key`, username will be `ec2-user`. Then I will copy that `.pem` file to the remote server by using `withCredentials([sshUserPrivateKey(credentialsId: 'ec2-server-key', keyFileVariable: 'keyfile', usernameVariable: 'user' )]){}`
+ 
+    - `keyFileVariable: 'keyfile'` basically create a temporary with content of the `ec2-server-key` credentials so I have the whole file available not the content only
+   
+  - Now I can `sh "scp ${keyfile} root@<remote-ip-address>:/root/ssh-key.pem"` .
+ 
+  - `root@<remote-ip-address>:/root/ssh-key.pem` I want that file to have a specific name that I configure in `ansible.cfg` -> `private_key_file = ~/ssh-key.pem`
+ 
+  - I don't need this `-o StrictHostKeyChecking=no` bcs it happen  in `sh "scp -o StrictHostKeyChecking=no ansible/* root@<remote-ip-address>:/root"` already
+ 
+  - This will take care of copying all the necessary files to the Ansible server so that we can execute Ansible Playbook from there 
+
 ```
 stage("Copy files to Ansible Server"){
  steps {
     script {
+      sshagent(['ansible-server-key']) {
+        sh "scp -o StrictHostKeyChecking=no ansible/* root@<remote-ip-address>:/root"
+        withCredentials([sshUserPrivateKey(credentialsId: 'ec2-server-key', keyFileVariable: 'keyfile', usernameVariable: 'user' )]){
+          sh "scp ${keyfile} root@<remote-ip-address>:/root/ssh-key.pem"
+        }
+      }
+    }
+  }
+}
+```
+
+No I can `git add .` and `git commit -m ""` and `git push` to the remote repository  
+
+#### Create Jenkins pipeline 
+
+
+I will create a simple Pipeline called `ansilbe-pipeline`
+
+I will configure that pipline to work with my java Application . 
+
+ - Put my Repository URL in there
+
+ - Configure credentials of that Repository
+
+ - Branch should be `/ansible` 
+
+Then I can run the pipeline . Then `ssh` to the remote Ansible server I will see all the files that I copy will be there 
+      
+One thing I have to optimize is when I click inside the build I have the warning side that say we have security issue exposing the private key file 
+
+ - Warning: A secret was passed to `sh` using Groovy String interpolation which is insecure
+
+ - What is that mean is that right here `withCredentials([sshUserPrivateKey(credentialsId: 'ec2-server-key', keyFileVariable: 'keyfile', usernameVariable: 'user' )]){}` I am referencing the `keyfile` here directly putting like above example is insecure and that has to do with how groovy interpreter acutally works and the problem is that the groovy interpreter will actually expose the contents of this secret on the command line so it's going to be in the command line history which is insecure so in order to fix that and avoid this from happening there is another syntax that we can use so instead of `""` I will use `''` and remove the `{}`
+
+```
+withCredentials([sshUserPrivateKey(credentialsId: 'ec2-server-key', keyFileVariable: 'keyfile', usernameVariable: 'user' )]){
+  sh 'scp $keyfile root@<remote-ip-address>:/root/ssh-key.pem'
+}
+```
+
+ - This syntax will make groovy interpreter use this secret in a different way which will not expose it to a command line
+
+####  Execute Ansible Playbook from Jenkins
+
+Now I want to execute the Playbook from Jenkins Server by triggering it on a remote server 
+
+I will add another stage call `stage("execute ansible playbook")`
+
+ - I need another plugin which basically enable us to execute command line on a remote server. Jenkins will execute a command on the Ansible server on a remote server using this so basically now all the files are available on the Ansbile server Jenkins needs to trigger this Ansible Playbook command and that what's we need to do . Plugin called `SSH Pipeline Steps`
+
+ - `sshCommand` have 2 parameters
+
+   - `remote: remote` this is an object with multiple attributes that references the remote server so basically we are executing a command on a remote server and we have to pass in an object for the remote server including the host name and ip address, user, private key and so on . All of that will be in `remote` object that I created
+  
+   - Second parameters `command: ""` this is a actual command
+  
+   - Now I will create a `remote` object
+
+
+```
+stage("execute ansible playbook"){
+  steps{
+    script {
+      echo "calling ansible playbook to configure ec2 instances"
+      def remote = [:]
+      remote.name = "ansible-server" # This is a name of the remote server
+      remote.host = "<ip-address>" # I need to put the IP Address of  the remote server
+      remote.allowAnyHosts = true # This help me not to confirm this interactively
+
+      ## I will use withCredentials to get username and private key for the remote object .
+
+      withCredentials([sshUserPrivateKey(credentialsId: 'ansible-server-key', keyFileVariable: 'keyfile', usernameVariable: 'user' )]){
+        sh 'scp $keyfile root@<remote-ip-address>:/root/ssh-key.pem'
+      }
       
     }
   }
 }
 ```
- 
-   
-      
-
-
-
-
-
-
 
 
 
