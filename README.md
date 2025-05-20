@@ -162,6 +162,11 @@
  
   - [Set ENV for kubeconfig](#Set-ENV-for-kubeconfig)
 
+- [Run Ansible from Jenkins Pipeline](#Run-Ansible-from-Jenkins-Pipeline)
+
+  - [Prepare Ansible Control Node](#Prepare-Ansible-Control-Node)  
+  
+
 # Ansible-
 
 ## Introduction
@@ -2840,18 +2845,37 @@ I can set an ENV `K8S_AUTH_KUBECONFIG` before executing Ansible that points to t
 
  - Now I can delete all the kubeconfig in all task
 
+## Run Ansible from Jenkins Pipeline
 
+I have a Jenkins server running on a DigitalOcean droplet 
 
+For each tool that we wanted to use like Terraform or kubectl to execute from a pipeline basically installed it and made it available inside the Jenkins Server . So we have kubectl command or Terraform command that available on the Jenkins job 
 
+However for Ansible we will do something a little different . Instead of installing Ansible inside Jenkins container and making it available in a Jenkins Server, we will create a dedicated Server for Ansible and Install Ansible there 
 
+This is a common practice I can either run Ansible locally on my laptop or Jenkins server , install it locally and run it from there or as a common practice I will have a dedicated server for Ansible and install it on a different server and I can execute Ansible command from that Server where Ansible is installed 
 
+ - I will create another Droplet and I will install Ansible on that droplet
 
+ - Now I have separate Jenkins server and separate Jenkins Server both running on DigitalOcean
 
+Once we have that set up we want to execute Ansible playbook from a Jenkins pipeline that configures two EC2 instances. It basically just install Docker and Docker Compose on them 
 
+To see that in action we will create a pipeline in Jenkins, we will connect it to our already familar Java application and in Java application we will create a Jenkins file that basically calls an Ansible playbook execution on a separate server from Jenkins and that Playbook will configure 2 EC2 by installing Docker and Docker Compose on them  
 
+#### Prepare Ansible Control Node
 
+I will create a new Droplet called `Ansbile Server` . This will be a Server Control Node . 
 
+The Server Control Node basically controls and configures other remote servers
 
+Next step I will ssh into that Server and Install Ansible . `ssh root@<ip address>`
+
+ - Update server : `apt update`
+
+ - To Install ansible : `apt install ansible-core`
+
+ - I also need to install Python module for AWS bcs Ansible is based on Python so whenever we want to execute certain tasks from Ansible on AWS servers for some of the tasks we will need the Python module for AWS which Ansible will then use in the background . Those Python module is `boto3` and `botocore`. To install `boto3` on Linux: `apt install python3-boto3` after installed this , this is also install `boto-core` as a dependency
 
 
 
