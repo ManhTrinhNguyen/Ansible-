@@ -175,6 +175,18 @@
   - [Create Jenkins pipeline](#Create-Jenkins-pipeline)
  
   - [Execute Ansible Playbook from Jenkins](#Execute-Ansible-Playbook-from-Jenkins)
+ 
+  - [Optimizations](#Optimizations)
+ 
+- [Ansible Roles](#Ansible-Roles)
+
+  - [Create Ansible Roles](#Create-Ansible-Roles)
+ 
+  - [Using Roles in Plays](#Using-Roles-in-Plays)
+ 
+  - [Complete our Roles](#Complete-our-Roles)
+ 
+  - [Customize Roles with Variables](#Customize-Roles-with-Variables)
   
 
 # Ansible-
@@ -3031,11 +3043,13 @@ withCredentials([sshUserPrivateKey(credentialsId: 'ec2-server-key', keyFileVaria
 
 ####  Execute Ansible Playbook from Jenkins
 
+<img width="940" alt="Screenshot 2025-05-21 at 13 26 27" src="https://github.com/user-attachments/assets/2b1c6d0d-f4f6-41fc-8b54-357c7aa04441" />
+
 Now I want to execute the Playbook from Jenkins Server by triggering it on a remote server 
 
 I will add another stage call `stage("execute ansible playbook")`
 
- - I need another plugin which basically enable us to execute command line on a remote server. Jenkins will execute a command on the Ansible server on a remote server using this so basically now all the files are available on the Ansbile server Jenkins needs to trigger this Ansible Playbook command and that what's we need to do . Plugin called `SSH Pipeline Steps`
+ - I need another plugin which basically enable us to execute command line on a remote server. Jenkins will execute a command on the Ansible server on a remote server using this so basically now all the files are available on the Ansbile server Jenkins needs to trigger this Ansible Playbook command and that what's we need to do . Plugin called `SSH Pipeline Steps` (https://plugins.jenkins.io/ssh-steps/)
 
  - `sshCommand` have 2 parameters
 
@@ -3043,7 +3057,25 @@ I will add another stage call `stage("execute ansible playbook")`
   
    - Second parameters `command: ""` this is a actual command
   
-   - Now I will create a `remote` object
+   - Now I will create a `remote` object:
+  
+     - `def remote = [:]`:  This is a empty key:value pair object
+    
+     - `remote.name = "ansible-server"`: This is a name of the remote server
+    
+     - `remote.host = "<ip-address>"` : I need to put the IP Address of  the remote server
+    
+     - `remote.allowAnyHosts = true`: This help me not to confirm this interactively
+    
+     - `remote.user = user`: Username of the host
+    
+     - `remote.identityFile = keyfile` : This is a private key reference of that SSH `keyfile`
+    
+     - `sshCommand remote: remote, command: "ls -l"` : I can have multiple command like `sshCommand remote: remote, command: "ls -l; pwd"` or I can specify another the block with another command
+    
+     - !!! Note: All of those attribute above is required
+    
+     - To execute Ansible playbook command on the Remote Server : `sshCommand remote: remote, command: "ansible-playbook my-playbook.yaml"`
 
 
 ```
@@ -3052,31 +3084,369 @@ stage("execute ansible playbook"){
     script {
       echo "calling ansible playbook to configure ec2 instances"
       def remote = [:]
-      remote.name = "ansible-server" # This is a name of the remote server
-      remote.host = "<ip-address>" # I need to put the IP Address of  the remote server
-      remote.allowAnyHosts = true # This help me not to confirm this interactively
+      remote.name = "ansible-server" 
+      remote.host = "<ip-address>" 
+      remote.allowAnyHosts = true
 
       ## I will use withCredentials to get username and private key for the remote object .
 
       withCredentials([sshUserPrivateKey(credentialsId: 'ansible-server-key', keyFileVariable: 'keyfile', usernameVariable: 'user' )]){
-        sh 'scp $keyfile root@<remote-ip-address>:/root/ssh-key.pem'
+        remote.user = user
+        remote.identityFile = keyfile
+        sshCommand remote: remote, command: "ls -l"
+        sshCommand remote: remote, command: "ansible-playbook my-playbook.yaml"
       }
-      
     }
   }
 }
 ```
 
+#### Optimizations 
+
+I want set a ENV for Ansible Server iP Address `ANSIBLE_SERVER = "138.68.94.71"`
 
 
+```
+pipeline {
+  agent: any
+  environment {
+    ANSILBE_SERVER = <ansible_ipaddress>
+  }
+  stages {
+    stage("Copy files to Ansible Server"){
+     steps {
+        script {
+          sshagent(['ansible-server-key']) {
+            sh "scp -o StrictHostKeyChecking=no ansible/* root@${ANSIBLE_SERVER}:/root"
+            withCredentials([sshUserPrivateKey(credentialsId: 'ec2-server-key', keyFileVariable: 'keyfile', usernameVariable: 'user' )]){
+              sh 'scp $keyfile root@$ANSIBLE_SERVER:/root/ssh-key.pem'
+            }
+          }
+        }
+      }
+    }
+    
+    stage("execute ansible playbook"){
+      steps{
+        script {
+          echo "calling ansible playbook to configure ec2 instances"
+          def remote = [:]
+          remote.name = "ansible-server" 
+          remote.host = "<ip-address>" 
+          remote.allowAnyHosts = true
+    
+          ## I will use withCredentials to get username and private key for the remote object .
+    
+          withCredentials([sshUserPrivateKey(credentialsId: 'ansible-server-key', keyFileVariable: 'keyfile', usernameVariable: 'user' )]){
+            remote.user = user
+            remote.identityFile = keyfile
+            sshCommand remote: remote, command: "ls -l"
+            sshCommand remote: remote, command: "ansible-playbook my-playbook.yaml"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+I also want to automate the manual process of configuring the Ansible server. Let's say if the Ansible server is dynamic and we always change it and maybe new server get created, we don't want to always ssh into it and install Ansbile and the Python modules for Docker and Docker compose . I also want to automate the process 
+
+ - Right before we execute Ansible Playbook . We can actually execute a script on remote server : `sshScript remote: remote, script: "prepare-ansible-server.sh"`
+
+ - `touch prepare-ansible-server.sh` this script file basically prepare everything needed on Ansible, install Ansible ... before executing Ansible Playbook
+
+ - I could also automate creating AWS credentials on a remote Server by creating the credentials in our Jenkinsfile
+
+```
+#!/usr/bin/env bash
+
+apt update
+apt install ansible -y
+apt install python3-boto3 
+```
 
 
+```
+pipeline {
+  agent: any
+  environment {
+    ANSILBE_SERVER = <ansible_ipaddress>
+  }
+  stages {
+    stage("Copy files to Ansible Server"){
+     steps {
+        script {
+          sshagent(['ansible-server-key']) {
+            sh "scp -o StrictHostKeyChecking=no ansible/* root@${ANSIBLE_SERVER}:/root"
+            withCredentials([sshUserPrivateKey(credentialsId: 'ec2-server-key', keyFileVariable: 'keyfile', usernameVariable: 'user' )]){
+              sh 'scp $keyfile root@$ANSIBLE_SERVER:/root/ssh-key.pem'
+            }
+          }
+        }
+      }
+    }
+    
+    stage("execute ansible playbook"){
+      steps{
+        script {
+          echo "calling ansible playbook to configure ec2 instances"
+          def remote = [:]
+          remote.name = "ansible-server" 
+          remote.host = "<ip-address>" 
+          remote.allowAnyHosts = true
+    
+          ## I will use withCredentials to get username and private key for the remote object .
+    
+          withCredentials([sshUserPrivateKey(credentialsId: 'ansible-server-key', keyFileVariable: 'keyfile', usernameVariable: 'user' )]){
+            remote.user = user
+            remote.identityFile = keyfile
+            sshCommand remote: remote, command: "ls -l"
+            sshCommand remote: remote, command: "ansible-playbook my-playbook.yaml"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+I can try out some different commands, as well as intergrating this in my existing pipeline, where I build Docker Images and deploy them on the remote server
+
+## Ansible Roles 
+
+Let's say me and my team adopted Ansile in my organization and I use that for automating a lots of different tasks. 
+
+And let's say I have large infrastructure and a lot of servers and a lot of applications running on them, I actually use Ansible for many different tasks. This mean over period of time my Playbooks may acutally become very complex and my Ansible project may become very large with lots of playbooks, with lots of tasks, and so on . It could acutally become complex and hard to maintain and kind of lose an overview, an oversight of what are these Ansible Playbook acutally do. This is where `Roles` come in
+
+`Roles` allow me to structure my complex Ansible project with lots of playbooks, with lots of tasks in them to structure them in a more manageable way
+
+`Roles` is basically like a package for my tasks in a `Play`.
+
+- So I have alot of `Playbook` with alot of `Play` inside and these `Plays` have tasks . I can actually take those tasks and package them in a small bundle which is a `Role`
+  
+<img width="500" alt="Screenshot 2025-05-21 at 13 55 00" src="https://github.com/user-attachments/assets/b17bf185-cff9-4edc-add3-d2765d1ba58b" />
+
+- This mean if multiple `Plays` use the same tasks I can extract that into a role package and then reuse that in multiple `playbooks`.
+
+- Great thing about `Role` is that it's not only for the tasks, but I can acutally package some other stuff that my tasks need inside the role . For example this could be static files so if my tasks are basically moving files around from one server to another or from the control node to alot of managed nodes, then I can have those static files inside my role and basically use them in the task
+
+- I can also define variables for my tasks inside that role package, as well as have some custome modules inside
+
+- And the advangtage of being able to define everything in the `Role` is that I have everything that I need to execute my tasks in one place, one package
+
+- So `Roles` are like little applications that are easy to maintain and resue in my `Playbooks`. And roles, similar to collections in Ansible, have a standard predefined structure . This is a standared every `Roles` creators have to follow has an advantage that everyone who learns the role Structures basically will be able to easily navigate inside the role . And also, the great thing about this is that it makes roles and tasks inside and all theses files inside much easier to maintain because I have a clear structure where I know where everything is going 
+
+<img width="500" alt="Screenshot 2025-05-21 at 14 05 53" src="https://github.com/user-attachments/assets/47223911-f4fc-4ec5-a53b-a4a04a91e958" />
+
+- So if I need to define variables , I know exactly where they should go If I have some additional static `files` that my tasks use, I know exactly where to put them
+
+- As the Result I may actually end up turning 100 `Playbooks` that I had in my Ansible PlayBook project into maybe 20 Playbooks and everything structured nicely into the reusable roles
+
+- In the Roles I can acutally define default variables. And that means that I can parameterize my whole role so whenever someone uses them in a playbook, they can just execute them without any extra work . However, they still have a possiblility to customize the behavior of  the tasks inside the `Roles` by overwriting these default variables .
+
+- And one more greate advantage of `Roles` is also that bcs they are so contained and separated from each other, so basically I have these separate packages of tasks, I can develop and test them also seprately . For example if one member of the team decides to work on one specific role, they can basically develope and test it without affecting the rest of Ansible project
+
+In addition to creating my own role in my Ansible Project, I can actually use existing ones from the community. So people who have already put in some time to create `Roles` or these small applications basically to do some very common tasks like setting up a MySQL databaase on Ubuntu server or installing and configuring Nginx on Linux servers, etc . And I can find the existing `Roles` from the community in 2 places
+
+- Main hup of `Roles` is Ansible Galaxy
+
+- Second is on Git repository or any version control System
+
+#### Create Ansible Roles
+
+I will restucture my deploy Docker new user `Playbook`
+
+In Docker Playbook I basically install all the necessary stuff on a EC2 server and then we create a Linux user and start Docker container on the Server using Docker Compose. 
+
+- If I wanted to configure the same thing on another Server let's say Digital Ocean droplet instead of EC2 server, we would acutally need to write another playbook bcs there is some step will be different. However there are some steps still the same like create Linux user, and starting docker container . Instead of repeating the whole thing and basically having duplicate configuration code, we can actually extract the common logic into `Roles` and then reuse them inside the playbooks
+
+- It's like a structure of Function in programming languge where I extract the common logic into a functionb and then I call the function or use that function in different places with different parameters . So I can override some of the values but the function logic stays the same
 
 
+First I will copy entire a code from `deploy-docker-new-user.yaml` to keep the reference 
+
+First thing I need for `Roles` is a folder inside Ansible project called `roles`: `mkdir roles` 
+
+!!! NOTE: All the names are acutally predefined, I have to use these names for the folders and files insdie 
+
+Now I want to extract the Create New Linux user `Play`. I will create another folder inside `roles` folder `mkdir create_user` (This I can call whatever I want)
+
+Another `Roles` is for Start Docker Containes `Play` . I will create another folder inside `roles` folder `mkdir start_containers` (This I can call whatever I want)
+
+Now inside each `Roles` folder I have to a required directory called `tasks` `mkdir tasks`
+
+And inside the `tasks` folder I will have a required file called `main.yaml` `touch main.yaml`
+
+So now I have the `main.yaml` file for Create_user `Roles`, and `main.yaml` file for Start_container `Roles`
+
+Now I will go to the `Playbook`. I will copy the Create new Linux user `Play` task and I just paste it in `main.yaml` 
 
 
+```
+/create_user/main.yaml
 
+- name: Create new Linux user
+  user:
+    name: nana
+    groups: adm, docker
+```
 
+- What I did is take the lists of tasks and just copy that exactly as is inside the roles `main.yaml` file 
+
+And the same I will do for start_container role : 
+
+```
+/start_containers/main.yaml
+
+- name: Copy docker compose
+  copy:
+    src: <src to docker compse file from my local>
+    dest: <destination where I want that docker compose file to be in remote server>
+- name: Docker login
+  docker_login:
+    username: nguyenmanhtrinh
+    password: "{{docker_password}}"
+- name: Start containers from compose
+  community.docker.docker_compose_v2:
+    project_src: <destination where I want that docker compose file to be in remote server>
+```
+
+Now I have my Roles already defined 
+
+#### Using Roles in Plays
+
+Now we have to reference those roles inside the `Playbook`
+
+Instead of `tasks` I will do `roles` . 
+
+- And This is will be a list of the `roles` that we have in our project . And the name of the `roles` is the name of the folder that we have inside `roles` directory
+
+```
+- name: Create new Linux user
+  hosts: all
+  become: yes
+  roles:
+    - create_user
+
+- name: start Docker containers
+  hosts: all
+  become: yes
+  become_user: nana
+  vars_files:
+    - project-vars
+  roles:
+    - start_containers
+```
+
+Ansible know where to find those bcs of the structure bcs Ansible knows to look for `roles` with this name inside the roles directory and then inside that role directory, look for task folder and the `main.yaml` and basically just grap all that logic and include that right here . With this we have restructured our whole `Playbook` into `Roles`
+
+If I go back to the `roles/start_container` tasks
+
+- The first one is the vairalbe `password: {{docker_password}}` that I reference . And this variable is defined in the projects `project-vars`. We don't have to change anything in `roles/start_container/main.yaml` bcs in playbook itself we are referencing the variables from the `project-vars` file
+
+- And we can juse simple use any variables defined inside the tasks in the roles. So no changes needed here. another thing I want to point out is the file that we referencing `role/start_container/main.yaml -> src: <source of the file in my local>` and since this is an absolute path to the docker compose . No change needed here
+
+Now in order to test that we will need 2 EC2 Server which I can configure with this `playbook`. So i will create ec2 server using Terraform 
+
+I will use the dynamic inventory file bcs I don't want to hard code and copy paste the IP addresses or public domain names of those Servers . So we are acutally good to go `ansilbe-playbook deploy-docker-with-roles.yaml -i inventory_aws_ec2.yaml`
+
+Now everything work perfectly 
+
+#### Complete our Roles
+
+The task folders is a minimum requirement in the role directory so that the roles works. However we have a possibility to package much more than just tasks inside the role 
+
+Let's say al lthe static files that we are basically coyping around from one server to another . We want to have them also in the role . We don't want to be dependence on the path to exist on a machine . We want to package all the files inside the project itself (inside Ansible Role folder). 
+
+In this case we are referencing this docker-compose file from another project . So instead we will include this file `src: <src to docker compse file from my local>` directly into the role . And for static files that I use in the tasks inside my role, there is actually a dedicated folder called `/roles/start_container/files` (required)
+
+- And inside `/roles/start_container/files` we will creeate `docker-compose.yaml` with the same content. And now I have docker-compose file that I can use directly inside our role
+
+- Note that this is actually a very common use case for Ansbile tasks that I am copying static files like script files, maybe that I want to execute on a server or some other configuration  file for the server . It make sense to have them located in my Ansible project . Instead of having the distributed all around the place on different locations . So the `/roles/start_container/files` very practical
+
+- So now instead of reference this whole path `src: <src to docker compse file from my local>` I can `src: docker-compose.yaml` bcs now I have `docker-compose.yaml` inside `/roles/start_container/files` .
+
+- Note I don't have to `src: files/docker-compose.yaml` here just this `src: docker-compose.yaml` Ansible will know that this is a reference t oa static file and will actually look for this file inside the files directory
+
+To test this I will execute `ansilbe-playbook deploy-docker-with-roles.yaml -i inventory_aws_ec2.yaml` again 
+
+#### Customize Roles with Variables 
+
+If I staticlly hard code all the value our tasks it could be difficult to customzie it . 
+
+For example we hardcode the DockerHub registry URL and username here . If we check the Documentation, we can set the registry URL to the default Dockerhub address which is `registry_url: https://index.io` . Now let say I want to use another Docker registry with another Usename and password . I will not able to use this role for that bcs we have hardcode Dockerhub and useranme .
+
+With role I can parameterize all the task to give the users of this role or this Ansible project flexibility to use different valuesThis coudld be other Devop engineers who also use this same Ansible Project and basically allow them to set their own values and customize the values of the playbooks and roles 
+
+For that I will create a folder called `vars` inside our roles directory `mkdir vars` and inside that `vars` folder I have a file call `main.yaml`
+
+Now I will parameterize my `roles/start_containers/tasks/main.yaml`
+
+```
+/start_containers/main.yaml
+
+- name: Copy docker compose
+  copy:
+    src: <src to docker compse file from my local>
+    dest: <destination where I want that docker compose file to be in remote server>
+- name: Docker login
+  docker_login:
+    registry_url: "{{ docker_registry }}"
+    username: "{{ docker_username }}"
+    password: "{{ docker_password }}"
+- name: Start containers from compose
+  community.docker.docker_compose_v2:
+    project_src: <destination where I want that docker compose file to be in remote server>
+```
+
+So now in the `roles/start_containers/vars/main.yaml`
+
+```
+docker_registry: egistry_url: https://index
+docker_username: nguyenmanhtrinh
+```
+
+So now we have  these 2 value registry_url: `"{{ docker_registry }}"` , `username: "{{ docker_username }}"` defined in the `vars/main.yaml` file 
+
+And this `password: "{{ docker_password }}"` defined in the `project-vars`
+
+That mean I can actually define the variable values whenever I want in the project I can have any combination that I want . 
+
+In variables there are acutally a lot of ways to defined variable values like directly configuring them inside the `playbook` or referencing the variable file inside the playbook, passing them as command argument
+
+I have to know that there is a precedence order of how these variables will be applied . It means that If I have Docker Password defined here in the `project-vars` file and in my `roles/start_container/vars/main.yaml` file . Ansible have to decide which to use 
+
+<img width="498" alt="Screenshot 2025-05-21 at 16 18 36" src="https://github.com/user-attachments/assets/6474a6b4-a235-4dfd-b948-5d97bd5c581a" />
+
+So this variable value in here `roles/start_container/vars/main.yaml` will override this variables value in here `project-vars`
+
+In addition to that I am as a creator of the role can actually define default variables in my role . So instead of having these variable file that user themselves will have to set the value inside I can define my own default variables . Which mean if no value will be provided for these variable in `tasks/main.yaml`, then default values for these variable will be used and I can define these default variables in another folder call `defaults` .
+
+And in `start_containers/defaults` I also have `main.yaml`  and lets say this is my default variable 
+
+```
+docker_registry: egistry_url: https://index
+docker_username: nguyenmanhtrinh
+docer_password: xxxx
+```
+
+I then user can override these value either in `roles/start_containers/vars/yaml` or `project-vars`
+
+The same way in `roles/create_user` I will create `roles/create_user/defaults/main.yaml` . 
+
+- Groups is one of Ansible built-in variables that is reserved for use by Ansible and can not be used when creating our own variables  
+
+- And I want to parameterize the `groups` : `groups: {{user_groups}}`
+
+- And in `roles/create_user/defaults/main.yaml` : `user_groups: adm, docker` .
+
+- Also I can override the value in `deploy-docker-with-roles.yaml` using :
+
+```
+vars:
+  groups: adm, docker
+```
 
 
 
