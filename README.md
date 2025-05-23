@@ -2429,7 +2429,7 @@ To configure that in Ansible to fix the timing issue . At the beggining before w
 
  - `search_regex: OpenSSH` Which basically mean, so we want the port 22 to be open but also contain open SSH
 
- - And important part is on which host we are waiting for port to be open `host: '{{ (ansible_ssh_host|default(ansible_host))|default(inventory_hostname) }}'`
+ - And important part is on which host we are waiting for port to be open `host: '{{ (ansible_ssh_host|default(ansible_host))|default(inventory_hostname) }}'` . This basically set the hosts value dynamically that we passed on . So that we don't have to hardcode any value
 
  - Also add `ansible_connection: Local` mean that we want execute this task locally, so from our local host we want to connect to the host that we get as a parameter and on that host we want to check these conditions
 
