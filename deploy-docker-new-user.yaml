@@ -1,6 +1,16 @@
 ---
+- name: Make sure acl (Access Control List) package available
+  hosts: aws_ec2
+  become: yes
+  become_user: root
+  tasks:
+    - name: Install acl
+      ansible.builtin.dnf:
+        name: acl 
+        state: present
+
 - name: Install Docker
-  hosts: ec2_servers
+  hosts: aws_ec2
   become: yes
   become_user: root
   tasks:
@@ -11,7 +21,7 @@
         state: present
 
 - name: Create new Linux User
-  hosts: ec2_servers
+  hosts: aws_ec2
   become: yes
   vars_files: project-vars.yaml
   tasks:
@@ -43,7 +53,7 @@
 #         mode: '0755'
 
 - name: Install Docker Compose
-  hosts: ec2_servers
+  hosts: aws_ec2
   become: yes
   become_user: "{{linux_name}}"
   vars_files: 
@@ -63,7 +73,7 @@
         mode: +x
 
 - name: Start Docker
-  hosts: ec2_servers
+  hosts: aws_ec2
   become: yes
   become_user: root
   tasks:
@@ -74,7 +84,7 @@
 
 
 - name: Start Docker container
-  hosts: ec2_servers
+  hosts: aws_ec2
   vars_files: project-vars.yaml
   become: yes
   become_user: "{{linux_name}}"
