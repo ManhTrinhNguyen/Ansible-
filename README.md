@@ -132,8 +132,6 @@
  
   - [Wait for EC2 Server to be fully initialized](#Wait-for-EC2-Server-to-be-fully-initialized)
  
-  - [Fixing Ansible chmod: invalid mode A+user and Remote Temp Directory Warnings](#Fixing-Ansible-chmod-:-invalid-mode-A-+-user-and-Remote-Temp-Directory-Warnings)
- 
   - [Using null resource](#Using-null-resource)
  
 - [Dynamic Inventory](#Dynamic-Inventory)
