@@ -1,8 +1,22 @@
 ---
+- name: Wait for Port 22 become open on the host
+  hosts: all
+  gather_facts: False
+  tasks:
+    - name: Wait for Port 22 become open on the host and contain OPENSSH
+      ansible.builtin.wait_for:
+        port: 22
+        host: '{{ (ansible_ssh_host|default(ansible_host))|default(inventory_hostname) }}'
+        delay: 10
+        timeout: 200
+        search_regex: OpenSSH
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: /usr/bin/python3
+
 - name: Install Docker
-  hosts: ec2_servers
+  hosts: all
   become: yes
-  become_user: root
   tasks:
     - name: Install Docker
       ansible.builtin.dnf:
@@ -11,7 +25,7 @@
         state: present
 
 - name: Create new Linux User
-  hosts: ec2_servers
+  hosts: all
   become: yes
   vars_files: project-vars.yaml
   tasks:
@@ -20,30 +34,10 @@
         name: "{{linux_name}}"
         groups: adm, docker
         create_home: yes
-    - name: Create ~/.ansible/tmp for tim
-      file:
-        path: /home/{{linux_name}}/.ansible/tmp
-        state: directory
-        owner: "{{linux_name}}"
-        group: "{{linux_name}}"
-        mode: '0700'
-
-
-# - name: Create remote tmp dir for Ansible
-#   hosts: ec2_servers
-#   become: yes
-#   vars_files: project-vars.yaml
-#   tasks:
-#     - name: Ensure /tmp/.ansible-tmp exists
-#       file:
-#         path: /home/{{linux_name}}/.ansible/tmp
-#         state: directory
-#         owner: "{{linux_name}}"
-#         group: "{{linux_name}}"
-#         mode: '0755'
+  
 
 - name: Install Docker Compose
-  hosts: ec2_servers
+  hosts: all
   become: yes
   become_user: "{{linux_name}}"
   vars_files: 
@@ -63,7 +57,7 @@
         mode: +x
 
 - name: Start Docker
-  hosts: ec2_servers
+  hosts: all
   become: yes
   become_user: root
   tasks:
@@ -74,7 +68,7 @@
 
 
 - name: Start Docker container
-  hosts: ec2_servers
+  hosts: all
   vars_files: project-vars.yaml
   become: yes
   become_user: "{{linux_name}}"
