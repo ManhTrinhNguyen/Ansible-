@@ -132,6 +132,8 @@
  
   - [Wait for EC2 Server to be fully initialized](#Wait-for-EC2-Server-to-be-fully-initialized)
  
+  - [Fixing Ansible chmod: invalid mode A+user and Remote Temp Directory Warnings](#Fixing-Ansible-chmod-:-invalid-mode-A-+-user-and-Remote-Temp-Directory-Warnings)
+ 
   - [Using null resource](#Using-null-resource)
  
 - [Dynamic Inventory](#Dynamic-Inventory)
@@ -2476,6 +2478,70 @@ resource "null_resource" "configure_server" {
 Now we have a separate task or resource for Ansible playbook execution, and I can use this for `remote exec`, `local exec` . But I have to adjust the `${self.public_ip}` bcs we don't have this self reference anymore, bcs we are outside of the aws instances resource . We can just easily reference it the `aws_instance resource` like this  `${aws_instance.myapp-server.public_ip}`
 
 In `null_resource` we also have `triggers` attribute , Optional  but using `triggers` we can tell Terraform when to run `null_resource` . In our case we can configure Terraform to execute this `null_resource` or execute the Ansible Playbook acutally inside whenever a new server is created or basically whenever the ip address of that aws instance resource changes, so we know that a new server got created, so we need to run Ansible playbook
+
+####  Fixing Ansible chmod: invalid mode A+user and Remote Temp Directory Warnings
+
+####  Problem 1: ACL Permission Error When Using become_user
+
+![Screenshot 2025-05-28 at 12 16 13](https://github.com/user-attachments/assets/8acc417a-8475-4fa5-a1e3-14be9a37a7bc)
+
+Error Message : 
+
+```
+chmod: invalid mode: ‘A+user:tim:rx:allow’
+Failed to set permissions on the temporary files Ansible needs to create when becoming an unprivileged user.
+```
+
+Cause : 
+
+- When Ansible uses `become_user` to switch to an unprivileged user (like tim, ec2-user, etc.), it creates temporary files in `/tmp` on the remote server.
+
+- To grant that unprivileged user permission to use these temp files, Ansible tries to apply `Access Control Lists (ACLs)` using a command like: `chmod A+user:tim:rx:allow /tmp/ansible-tmp-XYZ`
+
+- This is not normal UNIX chmod. It's an ACL-based command that only works if:
+
+  - The underlying filesystem supports ACLs (most do)
+
+  - The `acl` package is installed (provides the required system commands like setfacl, getfacl, etc.)
+
+Solution :
+
+- Install `acl` Package on the remote Server before execute the script : `sudo yum install acl -y`
+
+#### Problem 2: Ansible Warning About Missing ~/.ansible/tmp Directory 
+
+![Screenshot 2025-05-28 at 12 15 59](https://github.com/user-attachments/assets/99e6a4b7-096b-4f04-84ad-e2b5046e48e0)
+
+Warning Message : 
+
+```
+[WARNING]: Module remote_tmp /home/tim/.ansible/tmp did not exist and was created with a mode of 0700, this may cause issues when running as another user.
+```
+
+Solution: 
+
+- Create the `.ansible/tmp` Directory in Your Playbook
+
+```
+- name: Create new Linux User
+  hosts: ec2_servers
+  become: yes
+  vars_files: project-vars.yaml
+  tasks:
+    - name: Create new Linux user
+      user:
+        name: "{{linux_name}}"
+        groups: adm, docker
+        create_home: yes
+    - name: Create ~/.ansible/tmp for tim
+      file:
+        path: /home/{{linux_name}}/.ansible/tmp
+        state: directory
+        owner: "{{linux_name}}"
+        group: "{{linux_name}}"
+        mode: '0700'
+```
+
 
 ## Dynamic Inventory
 
