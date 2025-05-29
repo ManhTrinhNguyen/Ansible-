@@ -1,0 +1,18 @@
+---
+- name: Deploy app in new namspace 
+  hosts: "localhost"
+  tasks: 
+    - name: Create a K8s namespace 
+      kubernetes.core.k8s:
+        name: ansible-test
+        api_version: v1
+        kind: Namespace
+        state: present 
+        kubeconfig: ~/.kube/config
+    - name: Deploy Nginx App 
+      kubernetes.core.k8s:
+        src: ./nginx-config.yaml
+        state: present
+        kubeconfig: ~/.kube/config
+        namespace: ansible-test
+
