@@ -1,0 +1,95 @@
+---
+- name: Install Docker 
+  hosts: droplets
+  tasks:
+    - name: update apt repo and cache 
+      apt:
+        update_cache: yes
+        force_apt_get: yes
+        cache_valid_time: 3600
+    - name: Install Docker 
+      apt:
+        name: docker.io
+        state: present
+
+- name: Ensure Docker is started and enabled 
+  hosts: droplets
+  tasks:
+    - name: Start and enable Docker
+      ansible.builtin.systemd_service:
+        name: docker
+        state: started
+        enable: yes
+      
+- name: Create Jenkins user and add Jenkins to Sudo, Docker groups
+  hosts: droplets
+  tasks: 
+    - name: Create Jenkins user 
+      user:
+        name: jenkin
+        groups: docker, sudo
+        append: yes 
+        create_home: yes # ensures a home directory like /home/jenkin is created.
+        shell: /bin/bash
+    - name: Create ~/.ansible/tmp for jenkin user 
+      file:
+        path: /home/jenkin/.ansible/tmp
+        state: directory
+        owner: jenkin
+        group: jenkin
+        mode: '0700'
+
+- name: Run Jenkins as a jenkin user by using Docker 
+  hosts: droplets
+  become_user: jenkin 
+  become: yes 
+  tasks: 
+    - name: Create Jenkin container 
+      community.docker.docker_container:
+        name: my-jenkin 
+        image: jenkins/jenkins:lts
+        volumes:
+          - jenkins_home:/var/jenkins_home
+          - /var/run/docker.sock:/var/run/docker.sock
+        published_ports:
+          - 8080:8080
+          - 50000:50000
+        detach: true
+        state: started 
+        restart_policy: unless-stopped
+
+- name: Run command inside Jenkin Container 
+  hosts: droplets
+  become_user: jenkin
+  become: yes
+  tasks:
+    - name: Update apt package 
+      community.docker.docker_container_exec:
+        container: my-jenkin
+        user: root
+        command: apt-get update
+    - name: Install curl 
+      community.docker.docker_container_exec:
+        container: my-jenkin
+        user: root
+        command: apt-get install -y curl
+    - name: Install nodejs and npm 
+      community.docker.docker_container_exec:
+        container: my-jenkin
+        user: root 
+        command: curl -sL https://deb.nodesource.com/setup_20.x -o nodesource_setup.sh
+    - name: Install Docker inside jenkins container 
+      community.docker.docker_container_exec:
+        container: my-jenkin
+        user: root 
+        command: bash -c "curl https://get.docker.com/ > dockerinstall && chmod 777 dockerinstall && ./dockerinstall"
+      register: install_docker_result
+    - debug: msg={{install_docker_result}}
+    - name: Set correct Permission on docker.sock
+      community.docker.docker_container_exec:
+        container: my-jenkin
+        user: root
+        command: chmod 666 /var/run/docker.sock
+
+
+  
