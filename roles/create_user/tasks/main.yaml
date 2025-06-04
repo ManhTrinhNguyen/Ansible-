@@ -1,9 +1,9 @@
 - name: Create new Linux user
   user:
     name: "{{linux_name}}"
-    groups: adm, docker
+    groups: "{{user_groups}}"
     create_home: yes
-    
+
 - name: Create ~/.ansible/tmp for tim
   file:
     path: /home/{{linux_name}}/.ansible/tmp

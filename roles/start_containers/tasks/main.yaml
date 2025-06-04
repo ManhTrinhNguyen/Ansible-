@@ -4,7 +4,8 @@
     dest: /home/{{linux_name}}/ 
 - name: Login to Docker Repository
   community.docker.docker_login:
-    username: nguyenmanhtrinh
+    registry_url: "{{ docker_registry}}"
+    username: "{{docker_username}}"
     password: '{{docker_password}}'
 - name: Start Container from Compose
   community.docker.docker_compose_v2:
