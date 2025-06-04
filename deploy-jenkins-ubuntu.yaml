@@ -19,7 +19,6 @@
       ansible.builtin.systemd_service:
         name: docker
         state: started
-        enable: yes
       
 - name: Create Jenkins user and add Jenkins to Sudo, Docker groups
   hosts: droplets
@@ -42,7 +41,7 @@
 - name: Run Jenkins as a jenkin user by using Docker 
   hosts: droplets
   become_user: jenkin 
-  become: yes 
+  become: yes
   tasks: 
     - name: Create Jenkin container 
       community.docker.docker_container:
@@ -63,33 +62,65 @@
   become_user: jenkin
   become: yes
   tasks:
+    - name: Check if setup marker exists
+      community.docker.docker_container_exec:
+        container: my-jenkin
+        user: root
+        command: test -f /var/jenkins_home/.jenkins_setup_done
+      register: setup_marker
+      ignore_errors: yes
+    - debug: msg={{setup_marker}}
+
+    - name: Create .jenkins_setup_done file 
+      community.docker.docker_container_exec:
+        container: my-jenkin
+        user: root
+        command: touch -f /var/jenkins_home/.jenkins_setup_done
+      when: setup_marker.rc != 0
+      
+    - debug: msg={{setup_marker}}
     - name: Update apt package 
       community.docker.docker_container_exec:
         container: my-jenkin
         user: root
         command: apt-get update
+      when: setup_marker.rc != 0
     - name: Install curl 
       community.docker.docker_container_exec:
         container: my-jenkin
         user: root
         command: apt-get install -y curl
-    - name: Install nodejs and npm 
+      when: setup_marker.rc != 0
+    - name: Download nodejs and npm 
       community.docker.docker_container_exec:
         container: my-jenkin
         user: root 
         command: curl -sL https://deb.nodesource.com/setup_20.x -o nodesource_setup.sh
+      when: setup_marker.rc != 0
+    - name: Run nodesource_setup.sh
+      community.docker.docker_container_exec:
+        container: my-jenkin
+        user: root 
+        command: bash nodesource_setup.sh
+      when: setup_marker.rc != 0
+    - name: Install Nodejs and npm 
+      community.docker.docker_container_exec:
+        container: my-jenkin
+        user: root 
+        command: apt-get install nodejs -y
+      when: setup_marker.rc != 0
     - name: Install Docker inside jenkins container 
       community.docker.docker_container_exec:
         container: my-jenkin
         user: root 
         command: bash -c "curl https://get.docker.com/ > dockerinstall && chmod 777 dockerinstall && ./dockerinstall"
-      register: install_docker_result
-    - debug: msg={{install_docker_result}}
+      when: setup_marker.rc != 0
     - name: Set correct Permission on docker.sock
       community.docker.docker_container_exec:
         container: my-jenkin
         user: root
         command: chmod 666 /var/run/docker.sock
+      when: setup_marker.rc != 0
 
 
   

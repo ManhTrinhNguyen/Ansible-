@@ -24,19 +24,8 @@
   hosts: aws_ec2
   become: yes
   vars_files: project-vars.yaml
-  tasks:
-    - name: Create new Linux user
-      user:
-        name: "{{linux_name}}"
-        groups: adm, docker
-        create_home: yes
-    - name: Create ~/.ansible/tmp for tim
-      file:
-        path: /home/{{linux_name}}/.ansible/tmp
-        state: directory
-        owner: "{{linux_name}}"
-        group: "{{linux_name}}"
-        mode: '0700'
+  roles:
+    - create_user
 
 
 - name: Install Docker Compose
@@ -75,19 +64,8 @@
   vars_files: project-vars.yaml
   become: yes
   become_user: "{{linux_name}}"
-  tasks:
-    - name: Copy docker compose file to Remote Server
-      copy:
-        src: ./docker-compose.yaml
-        dest: /home/{{linux_name}}/ 
-    - name: Login to Docker Repository
-      community.docker.docker_login:
-        username: nguyenmanhtrinh
-        password: '{{docker_password}}'
-    - name: Start Container from Compose
-      community.docker.docker_compose_v2:
-        project_src: /home/{{linux_name}}/
-        state: present
+  roles:
+    - start_containers
 
 
         

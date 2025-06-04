@@ -70,12 +70,3 @@
 
 
         
-# - name: Create new Linux User
-#   hosts: ec2_servers
-#   become: yes
-#   vars_files: project-vars.yaml
-#   tasks:
-#     - name: Create new Linux user
-#       user:
-#         name: '{{linux_name}}'
-#         groups: adm, docker

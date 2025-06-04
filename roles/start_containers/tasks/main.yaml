@@ -1,0 +1,12 @@
+- name: Copy docker compose file to Remote Server
+  copy:
+    src: docker-compose.yaml
+    dest: /home/{{linux_name}}/ 
+- name: Login to Docker Repository
+  community.docker.docker_login:
+    username: nguyenmanhtrinh
+    password: '{{docker_password}}'
+- name: Start Container from Compose
+  community.docker.docker_compose_v2:
+    project_src: /home/{{linux_name}}/
+    state: present
