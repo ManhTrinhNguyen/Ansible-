@@ -2987,6 +2987,8 @@ I will go to AWS Dashboard and launch 2 AWS Linux Iamge Instances
 
 ## Ansible Integration in Jenkins
 
+Java Maven Jenkins Repo (https://github.com/ManhTrinhNguyen/Jenkin-Exercise-Java-Maven)
+
 #### Copy files from Jenkins to Ansible Server Jenkinfile
 
 Now we have our Ansiblr Control Node and we have our Ansible managed Nodes. Now it is time for everything to come to together and basically to call the Ansible Control Node to configure those managed nodes and do that from a Jenkins pipeline 
